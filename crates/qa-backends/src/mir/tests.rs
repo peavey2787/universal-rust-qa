@@ -271,6 +271,38 @@ fn package_failure_detection_requires_a_new_available_record() {
 }
 
 #[test]
+fn emit_packages_preserves_aggregate_records_and_failure_rollup() {
+    let packages = vec![
+        Package {
+            manifest: PathBuf::from("good/Cargo.toml"),
+            name: "good".into(),
+            lib: true,
+            bin: false,
+        },
+        Package {
+            manifest: PathBuf::from("bad/Cargo.toml"),
+            name: "bad".into(),
+            lib: true,
+            bin: false,
+        },
+    ];
+    let (aggregate, records, failed) = emit_packages(packages, |package, aggregate, records| {
+        if package.name == "good" {
+            aggregate.push_str("good-mir");
+            records.push(record("good", EvidenceStatus::Available, Some(&package.manifest), "ok"));
+        } else {
+            records.push(record("bad", EvidenceStatus::Failed, Some(&package.manifest), "bad"));
+        }
+    });
+
+    assert_eq!(aggregate, "good-mir");
+    assert_eq!(records.len(), 2);
+    assert_eq!(records[0].status, EvidenceStatus::Available);
+    assert_eq!(records[1].status, EvidenceStatus::Failed);
+    assert!(failed);
+}
+
+#[test]
 fn emit_package_always_records_an_invalid_manifest_attempt() {
     let root = temp_dir("emit-invalid");
     let package = Package {

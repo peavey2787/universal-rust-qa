@@ -94,6 +94,51 @@ fn completion_probe_interval_is_inclusive_only_at_one_second() {
     assert!(watch::completion_probe_due(Duration::from_millis(1_001)));
 }
 
+#[test]
+fn completion_probe_requires_unfinalized_state_and_due_interval() {
+    assert!(watch::completion_probe_allowed(false, None));
+    assert!(!watch::completion_probe_allowed(true, None));
+    assert!(!watch::completion_probe_allowed(false, Some(Duration::from_millis(999))));
+    assert!(watch::completion_probe_allowed(false, Some(Duration::from_secs(1))));
+    assert!(!watch::completion_probe_allowed(true, Some(Duration::from_secs(1))));
+}
+
+#[test]
+fn finalized_process_termination_kills_the_root_process() {
+    let mut command = long_running_command();
+    command.stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = command.spawn().unwrap();
+    let pid = child.id();
+
+    watch::terminate_finalized_process(&mut child, pid, false, None);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut exited = child.try_wait().unwrap().is_some();
+    while !exited && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(25));
+        exited = child.try_wait().unwrap().is_some();
+    }
+    if !exited {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    assert!(exited, "finalized-process cleanup must terminate the root process");
+}
+
+fn long_running_command() -> Command {
+    #[cfg(windows)]
+    {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "ping -n 30 127.0.0.1 >NUL"]);
+        command
+    }
+    #[cfg(not(windows))]
+    {
+        let mut command = Command::new("sh");
+        command.args(["-c", "sleep 30"]);
+        command
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_descendant_cleanup_kills_child_while_parent_remains_alive() {

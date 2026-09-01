@@ -56,21 +56,22 @@ fn execute_ready_packages(
     out_dir: &Path,
     packages: Vec<Package>,
 ) -> MirEvidence {
-    let (aggregate, records, failed) = emit_packages(workspace, config, packages);
+    let (aggregate, records, failed) = emit_packages(packages, |package, aggregate, records| {
+        emit_package(workspace, config, package, aggregate, records);
+    });
     finish_mir(workspace, config, out_dir, aggregate, records, failed)
 }
 
-fn emit_packages(
-    workspace: &Path,
-    config: &QaConfig,
-    packages: Vec<Package>,
-) -> (String, Vec<EvidenceRecord>, bool) {
+fn emit_packages<F>(packages: Vec<Package>, mut emit: F) -> (String, Vec<EvidenceRecord>, bool)
+where
+    F: FnMut(&Package, &mut String, &mut Vec<EvidenceRecord>),
+{
     let mut aggregate = String::new();
     let mut records = Vec::new();
     let mut failed = false;
     for package in packages {
         let before = records.len();
-        emit_package(workspace, config, &package, &mut aggregate, &mut records);
+        emit(&package, &mut aggregate, &mut records);
         failed |= package_failed(before, &records);
     }
     (aggregate, records, failed)

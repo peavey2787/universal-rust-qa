@@ -160,3 +160,7 @@ Checks default/no-default/all-feature compilation, optional each-feature and con
 - **20 Self-hardening:** registry/schema/source-sprawl/launcher/Git integrity plus the full cross-platform test harness.
 
 Formal verification systems such as Kani, Verus, and Creusot remain intentionally outside the base `cargo qa` contract.
+
+## License
+
+Universal Rust QA is licensed solely under the GNU General Public License version 2.0 (`GPL-2.0-only`). See `LICENSE`. Third-party dependencies retain their own licenses; the license allowlist in `deny.toml` is dependency policy and does not add another license to this project.

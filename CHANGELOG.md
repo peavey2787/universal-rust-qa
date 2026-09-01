@@ -1,3 +1,10 @@
+## 2026-09-01 - r54 GPL-v2-only and interrupted-mutation survivor repair
+
+- Made the repository license unambiguous GPL v2 only: workspace package metadata now uses `GPL-2.0-only`, the obsolete MIT and Apache project-license files were removed, and the README states that the `deny.toml` license allowlist applies only to third-party dependencies.
+- Recovered actionable evidence from the power-interrupted r53 mutation campaign even though `outcomes.json` was corrupted: the durable text evidence had classified 1,421 of 2,481 enumerated mutants (1,206 caught, 210 unviable, 5 missed, 0 timed out) before the outage, leaving 1,060 unclassified. The campaign was incomplete, so these are the known survivors rather than a claim that all mutants ran.
+- Eliminated all five known survivors without weakening mutation policy: MIR package aggregation is now directly testable without spawning nested Cargo, with aggregate/record/failure-rollup assertions that expose whole-function and `|=` mutations; mutation-watch completion probing now has a pure finalized/interval predicate with exact conjunction regressions; and finalized-process termination has a direct process-effect regression so a no-op cleanup cannot survive.
+- No package semantic versions, strict thresholds, Clippy `-D warnings`, mutation timeout severity, or coverage policy changed.
+
 ## 2026-09-01 - r53 watchdog throttle regression repair
 
 - Applied the Rust 1.98 `rustfmt` layout reported by the Windows self-hardening run.

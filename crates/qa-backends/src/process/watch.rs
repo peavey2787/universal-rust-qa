@@ -84,10 +84,8 @@ where
             }
             suspended = sync_pause_state(child, pid, label, suspended, control, readers)?;
         }
-        if finalized_at.is_none()
-            && last_completion_check
-                .is_none_or(|checked: Instant| completion_probe_due(checked.elapsed()))
-        {
+        let since_last_check = last_completion_check.map(|checked: Instant| checked.elapsed());
+        if completion_probe_allowed(finalized_at.is_some(), since_last_check) {
             last_completion_check = Some(Instant::now());
             if complete() {
                 finalized_at = Some(Instant::now());
@@ -106,6 +104,13 @@ where
     }
 }
 
+pub(super) fn completion_probe_allowed(
+    finalized: bool,
+    since_last_check: Option<Duration>,
+) -> bool {
+    !finalized && since_last_check.is_none_or(completion_probe_due)
+}
+
 pub(super) fn completion_probe_due(elapsed: Duration) -> bool {
     elapsed >= Duration::from_secs(1)
 }
@@ -114,7 +119,7 @@ pub(super) fn grace_expired(elapsed: Duration, grace: Duration) -> bool {
     elapsed >= grace
 }
 
-fn terminate_finalized_process(
+pub(super) fn terminate_finalized_process(
     child: &mut std::process::Child,
     pid: u32,
     suspended: bool,
