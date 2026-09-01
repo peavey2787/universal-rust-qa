@@ -1,0 +1,162 @@
+# Universal Rust QA
+
+A policy-driven Rust QA framework that correlates source analysis, compiler evidence, dynamic backends, and runtime testing into one report and terminal health dashboard.
+
+**Implemented through Phase 20**: the complete 39-family non-formal QA contract, including hardware, performance/bloat, final binary hardening, release engineering, reproducibility, and framework self-hardening.
+
+## Commands
+
+```text
+cargo qa
+cargo qa coverage
+cargo qa mutants
+cargo qa fuzz
+cargo qa concurrency
+cargo qa constant-time
+cargo qa sanitizers
+cargo qa full
+cargo qa differential
+cargo qa fault
+cargo qa mir
+cargo qa platform
+cargo qa hardware
+cargo qa performance
+cargo qa performance-baseline
+cargo qa hardening
+cargo qa release
+cargo qa self-hardening
+cargo qa doctor
+cargo qa settings
+cargo qa exceptions
+cargo qa reports
+cargo qa export-config FILE
+cargo qa import-config FILE
+```
+
+Standard `cargo qa` runs now generate fresh `cargo-llvm-cov` coverage automatically when `[coverage] mode = "auto"` (the default), so CRAP and coverage health are based on current evidence instead of silently reusing or missing an old JSON file. Other expensive/nightly backend families still require their focused command or `full`/`release`. Pass `--existing-coverage` (alias `--reuse-coverage`) when you deliberately want to reuse the resolved `llvm-cov.json` for one run, or set `[coverage] mode = "existing"` to make reuse persistent for that project. `[coverage] mode = "off"` remains the explicit way to disable coverage.
+
+## Using Universal Rust QA on another project
+
+Install the Cargo subcommand once from this repository:
+
+```text
+cargo install --path crates/cargo-qa
+```
+
+Plain `cargo qa` intentionally preserves the original local workflow: run it from a Rust project and QA-owned reports/evidence remain in that project (`qa-out/`, `mutants.out/`, and the normal Cargo target directory). Non-interactive completion is the default. When attached to a real terminal, `cargo qa` still shows the live progress dashboard while work is running and then exits automatically; pass `--interactive` to keep the post-run dashboard/menu interactive.
+
+For an isolated external-project run, point the CLI at the project instead of changing directories. The standard command generates fresh coverage automatically:
+
+```text
+cargo qa --project-dir C:\projects\foo
+cargo qa full --project-dir C:\projects\foo
+```
+
+Fresh coverage also provisions a missing `llvm-tools-preview` component for the inspected Rust toolchain non-interactively through cargo-llvm-cov setup.
+
+To reuse coverage from a previous run instead of invoking `cargo llvm-cov`, add the explicit reuse flag:
+
+```text
+cargo qa --project-dir C:\projects\foo --existing-coverage
+cargo qa full --project-dir C:\projects\foo --reuse-coverage
+```
+
+In external-project mode the reusable file is `<state>/coverage/llvm-cov.json`. If the requested existing file is absent, coverage stays unavailable and the report says to remove the reuse flag or restore `[coverage] mode = "auto"`; Universal Rust QA never fabricates a numeric coverage value.
+
+Cargo-backed checks are executed with the **inspected workspace's active Rust toolchain**, not the toolchain used to build/install Universal Rust QA. When rustup is available, QA resolves the target directory's `rust-toolchain.toml`, `rust-toolchain`, or rustup directory override and launches Cargo through that resolved toolchain; explicit Cargo `+toolchain` jobs (such as MSRV checks) still override it. This prevents an older Universal QA installation toolchain from contaminating coverage or release evidence for a newer project.
+
+Persistent reuse is also available in `qa.toml`:
+
+```toml
+[coverage]
+mode = "existing"
+all_features = true
+```
+
+`--project` is an alias for `--project-dir`. External-project mode keeps QA transient state and Cargo build artifacts outside the inspected repository. With no explicit output/state paths it uses `UNIVERSAL_QA_STATE_HOME` when set, otherwise the platform state directory and a stable per-project hash:
+
+```text
+<state-home>/projects/<project-hash>/
+    reports/
+    coverage/
+    mutations/
+        mutants.out/
+    differential/
+    fault/
+    mir/
+    repro/
+    build/target/
+```
+
+On Windows the default state home is `%LOCALAPPDATA%\UniversalRustQA`; on Linux it is `$XDG_STATE_HOME/universal-rust-qa` or `~/.local/state/universal-rust-qa`; on macOS it is `~/Library/Application Support/UniversalRustQA`.
+
+Custom routing is also first-class:
+
+```text
+cargo qa --project-dir C:\projects\foo --output-dir C:\qa\foo-reports
+cargo qa --project-dir C:\projects\foo --state-dir C:\qa\foo-state
+cargo qa --project-dir C:\projects\foo --output-dir C:\qa\reports --state-dir C:\qa\state
+```
+
+If `--output-dir` is supplied without `--state-dir`, transient state is placed in `<output-dir>/state`. If `--state-dir` is supplied without `--output-dir`, reports are placed in `<state-dir>/reports`. Explicit `--output-dir` and `--state-dir` take precedence over `UNIVERSAL_QA_STATE_HOME`.
+
+## One-click full test + self-hardening
+
+Linux: `./run-all-tests.sh`
+
+Windows: double-click `run-all-tests.cmd`.
+
+Both bootstrap Rust when needed, install the configured QA extensions by default, run format/check/Clippy/tests/doctests, then execute `cargo qa self-hardening`. Full transcripts are written under `qa-out/self-hardening/`. Set `QA_SKIP_TOOL_INSTALL=1` only if the external QA tools are already installed.
+
+QA commands auto-exit by default, but a real terminal still receives the live dashboard while the run is active. Pass `--interactive` when you also want the post-run dashboard/menu to remain interactive. During live progress the normal health/LOC/CC/CRAP/test/coverage/mutation results stay visible while a progress bar, current category, elapsed time, and latest child-process status update underneath. Press `P` or Space to pause/resume the active external process tree, `S` to skip the current external test/check, or `C` to skip the current backend category. If a purely in-process Rust phase is active, pause is queued and takes effect at the next controllable category boundary rather than unsafely suspending an arbitrary Rust thread. Skipped work remains fail-closed and is reported as incomplete evidence; it never converts an incomplete run into a pass.
+
+## Reports
+
+In local mode, `qa-out/summary.txt` mirrors the terminal summary. In external mode the same report set is written to the resolved `reports/` directory or explicit `--output-dir`. JSON reports include the full report plus structural/test evidence and dedicated state, async, concurrency, errors, secrets, constant-time, sanitizer, differential, fault, MIR, platform, build, layout, FFI, hardware, performance, bloat, hardening, snapshots, documentation, dependencies, API, generated-output, reproducibility, self-hardening, mutation, fuzz, duplicate, dead-code, evidence, and findings outputs.
+
+Strict mutation runs are deliberately fresh verification runs: Universal Rust QA removes the prior cargo-mutants evidence directory before starting a requested campaign, then ingests the new `outcomes.json`. Local mode uses `<project>/mutants.out/`; external mode uses `<state>/mutations/mutants.out/`. Completed cargo-mutants process output is also parsed as a fail-safe so final counts remain reportable if the machine-readable file cannot be read.
+A finalized cargo-mutants campaign is also a shutdown boundary: after `outcomes.json` contains an `end_time` and complete internally consistent outcome counts, Windows descendant cleanup starts while the cargo-mutants parent is still addressable, then QA allows a short parent-exit grace period and retains a bounded process/pipe cleanup fallback instead of waiting indefinitely on inherited handles. The completion probe is throttled and reads only the JSON tail until the final marker appears, avoiding repeated multi-megabyte parses during long campaigns. Finalized disk evidence remains usable if cleanup itself reports an error; incomplete or inconsistent evidence remains fail-closed.
+
+Dead-code source-graph analysis is conservative around Rust indirection: direct/qualified calls, method calls, function pointers, turbofish references, and function identifiers carried by macro invocation token streams count as live references. String literals inside macros are not treated as code, an unused `macro_rules!` definition alone does not make a function live, and trait-implementation methods are not classified as source-unreferenced because trait dispatch can invoke them without a direct function call.
+
+## Phase 8 — State machines
+
+Critical state machines are checked for wildcard/unhandled transitions, explicit invalid-transition rejection, terminal-state review, and async transition atomicity.
+
+## Phase 9 — Async/concurrency
+
+Checks cancellation contracts, blocking calls in async functions, detached tasks, lock/await hazards, panic-capable `Drop`, unsafe `Send`/`Sync` rationale, shared mutable statics, relaxed atomics in critical concurrency code, and optional Loom/model-test execution.
+
+## Phase 10 — Error/security
+
+Checks swallowed important results, lost error context and broken error chains, secret logging/formatting and zeroization contracts, source-level secret-dependent branch/index hazards, and an optional repository-defined timing/constant-time evidence command.
+
+## Phase 11 — Native sanitizers
+
+`cargo qa sanitizers` executes configured ASan/LSan/TSan/MSan campaigns on a pinned/available nightly toolchain and records per-sanitizer status instead of assuming unsupported targets pass.
+
+## Phase 12 — Differential testing
+
+Configured reference/candidate commands consume the same deterministically sorted corpus. Identical entry commands fail the basic oracle-independence check. Exact, trimmed, and canonical-JSON equivalence are supported, and divergences are persisted as replayable JSON evidence.
+
+## Phase 13 — Fault injection
+
+`qa-fault-runtime` provides deterministic `(seed, kind, fail_at)` scheduling for I/O, allocation, partial-I/O, latency, and clock faults. `cargo qa fault` enumerates configured fail points and persists failing schedules for exact replay.
+
+## Phase 14 — MIR analysis
+
+`cargo qa mir` emits MIR per package with a pinned nightly, persists the aggregate IR, and correlates no-panic, no-allocation, drop-cleanup, zeroization, and async-retention signals back to annotated source functions.
+
+## Phase 15 — Platform/build/layout/FFI
+
+Checks default/no-default/all-feature compilation, optional each-feature and configured target matrices, declared MSRV compilation, build-script/proc-macro hermeticity signals, explicit critical layouts and raw-byte hazards, and FFI ABI/safety/panic contracts.
+
+## Phases 16–20
+
+- **16 Hardware:** MMIO, ISR stack/operation safety, DMA contracts, target/linker evidence.
+- **17 Performance/Bloat:** false-sharing heuristics, explicit vectorization contracts, instruction baselines, cargo-bloat and LLVM-lines evidence.
+- **18 Binary hardening:** release overflow checks and final ELF/PE/Mach-O mitigation/path-disclosure inspection.
+- **19 Release engineering:** snapshots, doctests/examples, dependency audits, API/SemVer, generated-output determinism, reproducible builds.
+- **20 Self-hardening:** registry/schema/source-sprawl/launcher/Git integrity plus the full cross-platform test harness.
+
+Formal verification systems such as Kani, Verus, and Creusot remain intentionally outside the base `cargo qa` contract.

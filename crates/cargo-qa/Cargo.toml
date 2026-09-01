@@ -1,0 +1,15 @@
+[package]
+name="cargo-qa"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[[bin]]
+name="cargo-qa"
+path="src/main.rs"
+[dependencies]
+qa-attr={path="../qa-attr",version="=0.1.0"}
+qa-model={path="../qa-model",version="=0.1.0"}
+qa-policy={path="../qa-policy",version="=0.1.0"}
+qa-sdk={path="../qa-sdk",version="=0.1.0"}
+toml.workspace=true
+crossterm.workspace=true

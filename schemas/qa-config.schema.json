@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Universal Rust QA configuration",
+  "type": "object",
+  "required": [
+    "schema",
+    "profile",
+    "output_dir"
+  ],
+  "properties": {
+    "schema": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "profile": {
+      "type": "string"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "sprawl": {
+      "type": "object"
+    },
+    "duplicates": {
+      "type": "object"
+    },
+    "dead_code": {
+      "type": "object"
+    },
+    "architecture": {
+      "type": "object"
+    },
+    "tests": {
+      "type": "object"
+    },
+    "coverage": {
+      "type": "object"
+    },
+    "mutation": {
+      "type": "object"
+    },
+    "fuzz": {
+      "type": "object"
+    },
+    "safety": {
+      "type": "object"
+    },
+    "resources": {
+      "type": "object"
+    },
+    "alloc": {
+      "type": "object"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "require_explicit_invalid_transition": {
+          "type": "boolean"
+        },
+        "require_roundtrip_contract": {
+          "type": "boolean"
+        },
+        "reject_terminal_exit": {
+          "type": "boolean"
+        },
+        "require_restart_contract": {
+          "type": "boolean"
+        }
+      }
+    },
+    "async_rules": {
+      "type": "object"
+    },
+    "errors": {
+      "type": "object"
+    },
+    "secrets": {
+      "type": "object"
+    },
+    "constant_time": {
+      "type": "object"
+    },
+    "sanitizers": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string"
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "toolchain": {
+          "type": "string"
+        },
+        "target": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "msan_complete_instrumentation": {
+          "type": "boolean"
+        }
+      }
+    },
+    "differential": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "target": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "reference_command",
+              "candidate_command",
+              "corpus",
+              "equivalence"
+            ]
+          }
+        }
+      }
+    },
+    "fault": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "max_fail_points": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "mir": {
+      "type": "object"
+    },
+    "platform": {
+      "type": "object"
+    },
+    "build": {
+      "type": "object"
+    },
+    "layout": {
+      "type": "object"
+    },
+    "ffi": {
+      "type": "object"
+    },
+    "viewer": {
+      "type": "object"
+    },
+    "exceptions": {
+      "type": "object"
+    },
+    "exception": {
+      "type": "array"
+    },
+    "hardware": {
+      "type": "object"
+    },
+    "performance": {
+      "type": "object"
+    },
+    "hardening": {
+      "type": "object"
+    },
+    "snapshots": {
+      "type": "object"
+    },
+    "documentation": {
+      "type": "object"
+    },
+    "dependencies": {
+      "type": "object"
+    },
+    "api": {
+      "type": "object"
+    },
+    "generated": {
+      "type": "object"
+    },
+    "reproducibility": {
+      "type": "object"
+    },
+    "self_hardening": {
+      "type": "object"
+    },
+    "bloat": {
+      "type": "object",
+      "properties": {
+        "max_percent_growth": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_absolute_growth_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "baseline_path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

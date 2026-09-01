@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Universal Rust QA rule registry","type":"object","required":["rules"],"properties":{"rules":{"type":"array"}}}

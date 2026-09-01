@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Universal Rust QA report",
+  "type": "object",
+  "required": ["schema","generated_unix_seconds","workspace","profile","summary","files","functions","evidence","findings"],
+  "properties": {
+    "schema":{"type":"integer"}, "generated_unix_seconds":{"type":"integer"}, "workspace":{"type":"string"}, "profile":{"type":"string"},
+    "summary":{"type":"object"}, "files":{"type":"array"}, "functions":{"type":"array"}, "types":{"type":"array"}, "interfaces":{"type":"array"},
+    "mutations":{"type":"array"}, "fuzz_targets":{"type":"array"}, "duplicates":{"type":"array"}, "dead_items":{"type":"array"},
+    "evidence":{"type":"array","items":{"type":"object","required":["family","check","status"]}},
+    "findings":{"type":"array","items":{"type":"object","required":["rule_id","severity","message"]}}
+  }
+}

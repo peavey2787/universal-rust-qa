@@ -1,0 +1,16 @@
+[package]
+name="qa-rules"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[dependencies]
+qa-model={path="../qa-model",version="=0.1.0"}
+qa-policy={path="../qa-policy",version="=0.1.0"}
+qa-syntax={path="../qa-syntax",version="=0.1.0"}
+toml.workspace=true
+walkdir.workspace=true
+syn.workspace=true
+proc-macro2.workspace=true
+
+[dev-dependencies]
+qa-attr={path="../qa-attr",version="=0.1.0"}

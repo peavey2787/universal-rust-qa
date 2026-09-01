@@ -1,0 +1,10 @@
+[package]
+name="qa-sdk"
+version.workspace=true
+edition.workspace=true
+license.workspace=true
+[dependencies]
+qa-engine={path="../qa-engine",version="=0.1.0"}
+qa-model={path="../qa-model",version="=0.1.0"}
+qa-policy={path="../qa-policy",version="=0.1.0"}
+qa-report={path="../qa-report",version="=0.1.0"}

@@ -1,0 +1,9 @@
+/target/
+/.qa-cache/
+/qa-out/
+*.zip
+.DS_Store
+
+/Cargo.lock
+/mutants.out/
+/fuzz/artifacts/

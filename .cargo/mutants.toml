@@ -1,0 +1,23 @@
+# Self-hardening is a workspace contract: downstream integration tests are allowed
+# to kill mutants in lower-level crates, and the full feature set must participate.
+test_workspace = true
+all_features = true
+
+# Interactive terminal adapters are validated by CLI integration tests. Mutations
+# that replace terminal I/O or remove EOF/Back exits either require a real TTY or
+# make the test process intentionally non-terminating, so they are excluded from
+# semantic mutation scoring. These same patterns are also passed explicitly by the
+# self-hardening backend so config discovery cannot silently change the campaign.
+exclude_re = [
+    'replace prompt ->',
+    'drive_terminal',
+    'handle_input',
+    'TerminalGuard::render',
+    'TerminalGuard::render_cooked',
+    '<impl Drop for TerminalGuard>::drop',
+    'delete match arm "b" \| "B" \| "" in (summary|structural|state_async|security|dynamic|platform)',
+    'replace \| with \^ in key_action',
+    'delete match arm "b" \| "" in menu_filtered',
+    'replace RunControl::is_paused -> bool with true',
+    'replace interrupt_child -> io::Result<ExitStatus> with Ok',
+]

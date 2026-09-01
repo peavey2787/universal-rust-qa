@@ -1,0 +1,20 @@
+schema = 2
+
+[rust]
+stable = "1.85.0"
+nightly = "nightly"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]
+nightly_components = ["rust-src"]
+
+[cargo_tools]
+cargo_llvm_cov = "cargo-llvm-cov"
+cargo_mutants = "cargo-mutants"
+cargo_deny = "cargo-deny"
+cargo_hack = "cargo-hack"
+cargo_machete = "cargo-machete"
+cargo_semver_checks = "cargo-semver-checks"
+cargo_bloat = "cargo-bloat"
+cargo_llvm_lines = "cargo-llvm-lines"
+cargo_asm = "cargo-asm"
+cargo_insta = "cargo-insta"
+cargo_fuzz = "cargo-fuzz (Linux/macOS when applicable)"
