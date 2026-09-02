@@ -1,3 +1,9 @@
+## 2026-09-02 - r69 resolve extracted Cargo project roots
+
+- Fixed external-project root resolution for extracted repositories. When the invocation directory itself has no `Cargo.toml` but contains exactly one immediate child directory that does, `cargo qa` now treats that child as the project root before any scanners or coverage backends run. This prevents static analysis from recursively finding Rust code while coverage incorrectly exits as `NotApplicable` at the outer extraction wrapper.
+- Added path-resolution regressions for the common single-wrapper archive layout and for ambiguous multi-Cargo directories, where QA deliberately keeps the caller-selected root instead of guessing. The visible development revision is advanced to r69.
+- No coverage/CRAP thresholds, package semantic version, GPL-v2-only licensing, mutation policy, or Clippy `-D warnings` policy changed.
+
 ## 2026-09-02 - r68 restore non-Cargo failure manifest creation
 
 - Fixed the non-Cargo repository coverage path so `coverage-failures.json` is written even when `qa-out/` does not already exist. `write_manifest` now creates its output directory before serializing the manifest, restoring the runner regression contract without changing direct cargo-llvm-cov collection for Cargo workspaces.

@@ -35,7 +35,21 @@ pub fn workspace(cwd: &Path, options: &PathOptions) -> Result<PathBuf, String> {
     if !canonical.is_dir() {
         return Err(format!("project directory is not a directory: {}", canonical.display()));
     }
-    Ok(native_tool_path(canonical))
+    let canonical = native_tool_path(canonical);
+    Ok(single_cargo_wrapper(&canonical).unwrap_or(canonical))
+}
+
+fn single_cargo_wrapper(root: &Path) -> Option<PathBuf> {
+    if root.join("Cargo.toml").is_file() {
+        return None;
+    }
+    let mut candidates = fs::read_dir(root)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir() && path.join("Cargo.toml").is_file());
+    let candidate = candidates.next()?;
+    candidates.next().is_none().then_some(candidate)
 }
 
 fn native_tool_path(path: PathBuf) -> PathBuf {
@@ -329,6 +343,32 @@ mod tests {
             PathOptions { project_dir: Some(cwd.join("missing-project")), ..Default::default() };
         assert!(workspace(&cwd, &missing_options).unwrap_err().contains("could not resolve"));
         fs::remove_dir_all(cwd).unwrap();
+    }
+
+    #[test]
+    fn workspace_resolution_unwraps_one_immediate_cargo_project() {
+        let outer = root("cargo-wrapper");
+        fs::remove_file(outer.join("Cargo.toml")).unwrap();
+        let inner = outer.join("rusty-kaspa-master");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join("Cargo.toml"), "[workspace]\n").unwrap();
+
+        assert_eq!(workspace(&outer, &PathOptions::default()).unwrap(), inner);
+        fs::remove_dir_all(outer).unwrap();
+    }
+
+    #[test]
+    fn workspace_resolution_does_not_guess_between_multiple_cargo_projects() {
+        let outer = root("cargo-wrapper-ambiguous");
+        fs::remove_file(outer.join("Cargo.toml")).unwrap();
+        for name in ["first", "second"] {
+            let child = outer.join(name);
+            fs::create_dir_all(&child).unwrap();
+            fs::write(child.join("Cargo.toml"), "[workspace]\n").unwrap();
+        }
+
+        assert_eq!(workspace(&outer, &PathOptions::default()).unwrap(), outer);
+        fs::remove_dir_all(outer).unwrap();
     }
 
     #[test]
