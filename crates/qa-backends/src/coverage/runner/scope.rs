@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 pub(super) struct CoverageScope {
     pub(super) eligible: Vec<CoveragePackage>,
     pub(super) covered: Vec<CoveragePackage>,
-    pub(super) failed_names: Vec<String>,
     pub(super) runtime_not_applicable: Vec<CoveragePackage>,
     pub(super) incomplete_baseline: bool,
 }
@@ -35,17 +34,10 @@ pub(super) fn coverage_scope(
         })
         .cloned()
         .collect::<Vec<_>>();
-    let failed_names = eligible
-        .iter()
-        .filter(|package| {
-            states.get(&package.name).is_none_or(|state| state.baseline_successes == 0)
-        })
-        .map(|package| package.name.clone())
-        .collect();
     let incomplete_baseline = eligible.iter().any(|package| {
         states.get(&package.name).is_none_or(|state| state.baseline_successes < required_baselines)
     });
-    CoverageScope { eligible, covered, failed_names, runtime_not_applicable, incomplete_baseline }
+    CoverageScope { eligible, covered, runtime_not_applicable, incomplete_baseline }
 }
 
 #[cfg(test)]
@@ -70,7 +62,6 @@ mod tests {
         )]);
         let scope = coverage_scope(&packages, &states, 2);
         assert_eq!(scope.covered.len(), 1);
-        assert!(scope.failed_names.is_empty());
         assert!(scope.incomplete_baseline);
     }
 }

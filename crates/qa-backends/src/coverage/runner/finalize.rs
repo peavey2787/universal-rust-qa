@@ -1,6 +1,8 @@
 use super::super::{
     CoverageEvidence,
-    execute::{AttemptSpec, TestMode, count_profiles, direct_report_args, report_args, run_attempt},
+    execute::{
+        AttemptSpec, TestMode, count_profiles, direct_report_args, report_args, run_attempt,
+    },
     manifest::{
         failed_report_detail, metadata_failure, partial_detail, scope_percent, write_manifest,
     },
@@ -77,12 +79,7 @@ pub(super) fn finalize_progressive(
         .flatten();
     let mut recovered_names = None;
     if parsed.as_ref().is_none_or(|evidence| evidence.status != EvidenceStatus::Available) {
-        if let Some(recovered) = recover_direct_reports(
-            workspace,
-            output,
-            &scope,
-            &mut attempts,
-        ) {
+        if let Some(recovered) = recover_direct_reports(workspace, output, &scope, &mut attempts) {
             parsed = Some(recovered.evidence);
             recovered_names = Some(recovered.package_names);
             profile_count += recovered.profile_count;
@@ -147,9 +144,7 @@ pub(super) fn finalize_progressive(
 }
 
 fn has_test_execution_failure(attempts: &[CoverageAttempt]) -> bool {
-    attempts
-        .iter()
-        .any(|attempt| attempt.stage == "test-execution" && attempt.outcome != "success")
+    attempts.iter().any(|attempt| attempt.stage == "test-execution" && attempt.outcome != "success")
 }
 
 fn remove_stale_report(path: &Path, degraded: &mut bool) {
@@ -168,10 +163,8 @@ fn recover_direct_reports(
     scope: &CoverageScope,
     attempts: &mut Vec<CoverageAttempt>,
 ) -> Option<DirectRecovery> {
-    let mut merged = CoverageEvidence {
-        status: EvidenceStatus::Available,
-        ..CoverageEvidence::default()
-    };
+    let mut merged =
+        CoverageEvidence { status: EvidenceStatus::Available, ..CoverageEvidence::default() };
     let mut package_names = Vec::new();
     let candidates = if scope.covered.is_empty() { &scope.eligible } else { &scope.covered };
     let rescue_root = output.join("llvm-cov-rescue");
@@ -253,11 +246,7 @@ fn measured_packages<'a>(
     let Some(names) = recovered_names else {
         return scope.covered.iter().collect();
     };
-    scope
-        .eligible
-        .iter()
-        .filter(|package| names.iter().any(|name| name == &package.name))
-        .collect()
+    scope.eligible.iter().filter(|package| names.iter().any(|name| name == &package.name)).collect()
 }
 
 fn recovery_target(attempts: &[CoverageAttempt], package: &str) -> Option<String> {
@@ -268,10 +257,7 @@ fn recovery_target(attempts: &[CoverageAttempt], package: &str) -> Option<String
         .and_then(|attempt| attempt.target.clone())
 }
 
-fn manifest_result(
-    output: &Path,
-    manifest: &CoverageManifest,
-) -> (Option<String>, Option<String>) {
+fn manifest_result(output: &Path, manifest: &CoverageManifest) -> (Option<String>, Option<String>) {
     match write_manifest(output, manifest) {
         Ok(path) => (Some(path), None),
         Err(error) => (None, Some(error)),

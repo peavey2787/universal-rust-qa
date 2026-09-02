@@ -1,3 +1,9 @@
+## 2026-09-02 - r59 progressive coverage build repair
+
+- Applied stable Rust formatting to the r58 progressive coverage changes so `cargo fmt --check` passes on Windows and other supported hosts.
+- Removed the obsolete `CoverageScope.failed_names` planning field and its stale test assertion. r58 finalization now derives failed packages from the packages that actually produced usable merged or direct-recovery evidence, so retaining the pre-recovery field was both unused and semantically superseded. The repair keeps Clippy/compile `-D warnings` strict rather than suppressing dead code.
+- No coverage thresholds, recovery semantics, package semantic versions, licensing, mutation policy, or warning policy changed.
+
 ## 2026-09-02 - r58 isolated progressive coverage recovery
 
 - Removed the remaining all-or-nothing failure point from progressive coverage finalization. The shared `--no-report`/`cargo llvm-cov report` path remains the fast path when raw profiles are healthy, but an empty, malformed, or unmergeable shared profile set now falls back to **isolated per-package direct JSON coverage runs**. Each rescue package receives its own cargo-llvm-cov target/profile directory, so one RocksDB/bindgen, WASM, platform-specific, malformed-profile, or other incompatible member cannot poison coverage evidence from unrelated members. Successful direct reports are source-filtered to their package roots, merged without double-counting line hits, and persisted as the canonical reusable `llvm-cov.json`.

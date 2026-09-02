@@ -254,10 +254,7 @@ mod tests {
     fn direct_reports_merge_line_hits_without_double_counting() {
         let mut left = CoverageEvidence {
             status: EvidenceStatus::Available,
-            files: BTreeMap::from([(
-                "/ws/a/src/lib.rs".into(),
-                BTreeMap::from([(1, 1), (2, 0)]),
-            )]),
+            files: BTreeMap::from([("/ws/a/src/lib.rs".into(), BTreeMap::from([(1, 1), (2, 0)]))]),
             ..CoverageEvidence::default()
         };
         let right = CoverageEvidence {

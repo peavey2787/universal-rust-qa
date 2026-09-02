@@ -63,11 +63,7 @@ fn failure_stages_separate_test_execution_from_instrumentation_and_reporting() {
         "test-execution"
     );
     assert_eq!(
-        attempt_stage(
-            TestMode::Default,
-            AttemptOutcome::Failed,
-            Some("environment-native-build")
-        ),
+        attempt_stage(TestMode::Default, AttemptOutcome::Failed, Some("environment-native-build")),
         "instrument-build"
     );
     assert_eq!(
@@ -119,12 +115,14 @@ fn direct_report_recovery_is_package_scoped_and_generates_json() {
     let args = direct_report_args(&package, Some("x86_64-pc-windows-msvc"), path);
     assert!(args.windows(2).any(|pair| pair[0] == "-p" && pair[1] == "wallet"));
     assert!(args.iter().any(|arg| arg == "--json"));
-    assert!(args.windows(2).any(|pair| {
-        pair[0] == "--output-path" && pair[1] == "qa-out/wallet.json"
-    }));
-    assert!(args.windows(2).any(|pair| {
-        pair[0] == "--target" && pair[1] == "x86_64-pc-windows-msvc"
-    }));
+    assert!(
+        args.windows(2)
+            .any(|pair| { pair[0] == "--output-path" && pair[1] == "qa-out/wallet.json" })
+    );
+    assert!(
+        args.windows(2)
+            .any(|pair| { pair[0] == "--target" && pair[1] == "x86_64-pc-windows-msvc" })
+    );
     assert!(args.iter().any(|arg| arg == "--coverage-target-only"));
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
     assert!(!args.iter().any(|arg| arg == "--no-report"));
@@ -143,8 +141,8 @@ fn report_generation_is_strict_first_and_tolerant_only_for_partial_recovery() {
 
 #[test]
 fn profile_count_uses_cargo_llvm_covs_top_level_raw_profile_contract() {
-    let root = std::env::temp_dir()
-        .join(format!("urqa-coverage-profile-count-{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("urqa-coverage-profile-count-{}", std::process::id()));
     match fs::remove_dir_all(&root) {
         Ok(()) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
