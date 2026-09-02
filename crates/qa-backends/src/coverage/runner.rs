@@ -11,6 +11,7 @@ use qa_policy::QaConfig;
 use std::{collections::BTreeMap, path::Path};
 
 mod finalize;
+mod recovery;
 mod scope;
 
 use scope::{CoverageScope, coverage_scope};
@@ -64,6 +65,9 @@ pub(super) fn collect_progressive(
             vec![],
             "no selected workspace members have Cargo-testable targets",
         );
+    }
+    if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
+        return finalize::failed(error);
     }
 
     let target_variants = target_variants(&config.coverage);

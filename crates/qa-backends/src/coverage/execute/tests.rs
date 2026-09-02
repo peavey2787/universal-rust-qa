@@ -109,6 +109,25 @@ fn diagnostics_distinguish_native_bindgen_target_test_and_build_failures() {
 }
 
 #[test]
+fn workspace_direct_recovery_matches_manual_json_collection_contract() {
+    let path = Path::new("qa-out/workspace.json");
+    let packages = [package("consensus"), package("wallet")];
+    let args = workspace_direct_report_args(&packages, None, path);
+    assert_eq!(args[0], "llvm-cov");
+    assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
+    assert!(args.iter().any(|arg| arg == "--no-fail-fast"));
+    assert!(args.iter().any(|arg| arg == "--json"));
+    assert!(
+        args.windows(2)
+            .any(|pair| pair[0] == "--output-path" && pair[1] == "qa-out/workspace.json")
+    );
+    assert!(args.windows(2).any(|pair| pair[0] == "-p" && pair[1] == "consensus"));
+    assert!(args.windows(2).any(|pair| pair[0] == "-p" && pair[1] == "wallet"));
+    assert!(!args.iter().any(|arg| arg == "--no-report"));
+    assert!(!args.iter().any(|arg| arg == "--no-clean"));
+}
+
+#[test]
 fn direct_report_recovery_is_package_scoped_and_generates_json() {
     let package = package("wallet");
     let path = Path::new("qa-out/wallet.json");
@@ -125,7 +144,9 @@ fn direct_report_recovery_is_package_scoped_and_generates_json() {
     );
     assert!(args.iter().any(|arg| arg == "--coverage-target-only"));
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
+    assert!(args.iter().any(|arg| arg == "--no-fail-fast"));
     assert!(!args.iter().any(|arg| arg == "--no-report"));
+    assert!(!args.iter().any(|arg| arg == "--no-clean"));
 }
 
 #[test]

@@ -1,15 +1,16 @@
 use super::super::{
     CoverageEvidence,
-    execute::{
-        AttemptSpec, TestMode, count_profiles, direct_report_args, report_args, run_attempt,
-    },
+    execute::{AttemptSpec, TestMode, count_profiles, report_args, run_attempt},
     manifest::{
         failed_report_detail, metadata_failure, partial_detail, scope_percent, write_manifest,
     },
     model::{CoverageAttempt, CoverageManifest},
     parse,
 };
-use super::CoverageScope;
+use super::{
+    CoverageScope,
+    recovery::{recover_direct_reports, recover_workspace_direct_report},
+};
 use qa_model::EvidenceStatus;
 use std::{
     fs,
@@ -47,6 +48,7 @@ pub(super) fn finalize_progressive(
         report_ok = strict_report.outcome == "success";
         attempts.push(strict_report);
         if !report_ok {
+            degraded = true;
             remove_stale_report(&report_path, &mut degraded);
             let tolerant_report = run_attempt(
                 workspace,
@@ -77,15 +79,58 @@ pub(super) fn finalize_progressive(
     let mut parsed = report_ok
         .then(|| parse_report(&report_path, &planned_covered_roots, &planned_excluded_roots))
         .flatten();
-    let mut recovered_names = None;
-    if parsed.as_ref().is_none_or(|evidence| evidence.status != EvidenceStatus::Available) {
-        if let Some(recovered) = recover_direct_reports(workspace, output, &scope, &mut attempts) {
-            parsed = Some(recovered.evidence);
-            recovered_names = Some(recovered.package_names);
+    let mut measured_names = if parsed.as_ref().is_some_and(usable_coverage) {
+        scope.covered.iter().map(|package| package.name.clone()).collect::<Vec<_>>()
+    } else {
+        vec![]
+    };
+    let mut recovery_used = false;
+
+    if parsed.as_ref().is_none_or(|evidence| !usable_coverage(evidence)) {
+        if let Some(recovered) = recover_workspace_direct_report(
+            workspace,
+            output,
+            &scope,
+            &mut attempts,
+        ) {
+            degraded |= recovered.degraded;
             profile_count += recovered.profile_count;
+            measured_names = recovered.package_names;
+            parsed = Some(recovered.evidence);
+            recovery_used = true;
         }
     }
-    let measured = measured_packages(&scope, parsed.as_ref(), recovered_names.as_deref());
+
+    let missing = scope
+        .eligible
+        .iter()
+        .filter(|package| !measured_names.iter().any(|name| name == &package.name))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        if let Some(recovered) =
+            recover_direct_reports(workspace, output, &scope, &missing, &mut attempts)
+        {
+            degraded |= recovered.degraded;
+            profile_count += recovered.profile_count;
+            if let Some(existing) = parsed.as_mut().filter(|evidence| usable_coverage(evidence)) {
+                parse::merge_evidence(existing, recovered.evidence);
+            } else {
+                parsed = Some(recovered.evidence);
+            }
+            for name in recovered.package_names {
+                if !measured_names.contains(&name) {
+                    measured_names.push(name);
+                }
+            }
+            recovery_used = true;
+        }
+    }
+    let measured = scope
+        .eligible
+        .iter()
+        .filter(|package| measured_names.iter().any(|name| name == &package.name))
+        .collect::<Vec<_>>();
     let covered_roots = measured.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
     let excluded_roots = scope
         .eligible
@@ -95,8 +140,17 @@ pub(super) fn finalize_progressive(
         .map(|package| package.root.clone())
         .collect::<Vec<_>>();
     if let Some(evidence) = parsed.as_mut() {
-        if evidence.status == EvidenceStatus::Available {
+        if usable_coverage(evidence) {
             parse::retain_package_scope(evidence, &covered_roots, &excluded_roots);
+            if recovery_used && usable_coverage(evidence) {
+                if let Err(error) = parse::write_merged_json(&report_path, evidence) {
+                    degraded = true;
+                    evidence.status = EvidenceStatus::Partial;
+                    evidence.error = Some(append_error(evidence.error.take(), error));
+                } else {
+                    evidence.source = Some(report_path.display().to_string());
+                }
+            }
         }
     }
     let failed_package_names = scope
@@ -157,104 +211,8 @@ fn remove_stale_report(path: &Path, degraded: &mut bool) {
     }
 }
 
-fn recover_direct_reports(
-    workspace: &Path,
-    output: &Path,
-    scope: &CoverageScope,
-    attempts: &mut Vec<CoverageAttempt>,
-) -> Option<DirectRecovery> {
-    let mut merged =
-        CoverageEvidence { status: EvidenceStatus::Available, ..CoverageEvidence::default() };
-    let mut package_names = Vec::new();
-    let candidates = if scope.covered.is_empty() { &scope.eligible } else { &scope.covered };
-    let rescue_root = output.join("llvm-cov-rescue");
-    let mut profile_count = 0usize;
-    for (index, package) in candidates.iter().enumerate() {
-        let path = output.join(format!("llvm-cov-rescue-{index}.json"));
-        let rescue_target = rescue_root.join(index.to_string());
-        let rescue_env = super::super::execute::coverage_env(&rescue_target);
-        let target_triple = recovery_target(attempts, &package.name);
-        let attempt = run_attempt(
-            workspace,
-            &rescue_target,
-            &rescue_env,
-            AttemptSpec {
-                package: Some(&package.name),
-                target: target_triple.as_deref(),
-                configuration: "direct-report-recovery",
-                mode: TestMode::DirectReport,
-                args: direct_report_args(package, target_triple.as_deref(), &path),
-            },
-        );
-        let success = attempt.outcome == "success" && path.exists();
-        profile_count += count_profiles(&rescue_target);
-        attempts.push(attempt);
-        if success {
-            let mut evidence = parse::parse(&path);
-            if evidence.status == EvidenceStatus::Available {
-                parse::retain_package_scope(
-                    &mut evidence,
-                    std::slice::from_ref(&package.root),
-                    &[],
-                );
-                if evidence.status == EvidenceStatus::Available {
-                    parse::merge_evidence(&mut merged, evidence);
-                    package_names.push(package.name.clone());
-                }
-            }
-        }
-        match fs::remove_file(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => eprintln!(
-                "warning: failed to remove temporary coverage report {}: {error}",
-                path.display()
-            ),
-        }
-    }
-    if package_names.is_empty() || merged.files.is_empty() {
-        return None;
-    }
-    let canonical = output.join("llvm-cov.json");
-    if let Err(error) = parse::write_merged_json(&canonical, &merged) {
-        merged.status = EvidenceStatus::Partial;
-        merged.error = Some(error);
-    } else {
-        merged.source = Some(canonical.display().to_string());
-    }
-    Some(DirectRecovery { evidence: merged, package_names, profile_count })
-}
-
-struct DirectRecovery {
-    evidence: CoverageEvidence,
-    package_names: Vec<String>,
-    profile_count: usize,
-}
-
 fn usable_coverage(evidence: &CoverageEvidence) -> bool {
     matches!(evidence.status, EvidenceStatus::Available | EvidenceStatus::Partial)
-}
-
-fn measured_packages<'a>(
-    scope: &'a CoverageScope,
-    parsed: Option<&CoverageEvidence>,
-    recovered_names: Option<&[String]>,
-) -> Vec<&'a super::super::model::CoveragePackage> {
-    if parsed.is_none_or(|evidence| !usable_coverage(evidence)) {
-        return vec![];
-    }
-    let Some(names) = recovered_names else {
-        return scope.covered.iter().collect();
-    };
-    scope.eligible.iter().filter(|package| names.iter().any(|name| name == &package.name)).collect()
-}
-
-fn recovery_target(attempts: &[CoverageAttempt], package: &str) -> Option<String> {
-    attempts
-        .iter()
-        .rev()
-        .find(|attempt| attempt.package.as_deref() == Some(package) && attempt.target.is_some())
-        .and_then(|attempt| attempt.target.clone())
 }
 
 fn manifest_result(output: &Path, manifest: &CoverageManifest) -> (Option<String>, Option<String>) {

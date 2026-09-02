@@ -20,12 +20,14 @@ pub(super) fn parse_value(path: &Path, value: &Value) -> CoverageEvidence {
     else {
         return failed("coverage JSON omitted data[0].totals.lines.percent".into());
     };
+    let source_root = cargo_llvm_cov_source_root(value);
     let mut files = BTreeMap::new();
     for file in value.pointer("/data/0/files").and_then(Value::as_array).into_iter().flatten() {
         let Some(name) = file.get("filename").and_then(Value::as_str) else {
             continue;
         };
-        let lines = files.entry(normalize(name)).or_insert_with(BTreeMap::<usize, u64>::new);
+        let name = resolve_source_path(name, source_root.as_deref());
+        let lines = files.entry(name).or_insert_with(BTreeMap::<usize, u64>::new);
         merge_segments(lines, file.get("segments").and_then(Value::as_array));
     }
     CoverageEvidence {
@@ -79,7 +81,7 @@ fn longest_matching_root(path: &str, roots: &[String]) -> Option<usize> {
         .max()
 }
 
-fn path_within_root(path: &str, root: &str) -> bool {
+pub(super) fn path_within_root(path: &str, root: &str) -> bool {
     let path = normalize(path);
     let root = normalize(root).trim_end_matches('/').to_string();
     if cfg!(windows) {
@@ -165,13 +167,79 @@ fn failed(error: String) -> CoverageEvidence {
     }
 }
 
+fn cargo_llvm_cov_source_root(value: &Value) -> Option<String> {
+    let manifest = value.pointer("/cargo_llvm_cov/manifest_path").and_then(Value::as_str)?;
+    let manifest = normalize(manifest);
+    let index = manifest.rfind('/')?;
+    if index == 0 {
+        return Some("/".into());
+    }
+    if index == 2 && is_windows_drive_absolute(&manifest) {
+        return Some(manifest[..=index].to_string());
+    }
+    Some(manifest[..index].to_string())
+}
+
+fn resolve_source_path(path: &str, source_root: Option<&str>) -> String {
+    let path = normalize(path);
+    if is_absolute_like(&path) {
+        return path;
+    }
+    let Some(source_root) = source_root else {
+        return path;
+    };
+    if source_root.ends_with('/') {
+        normalize(&format!("{source_root}{path}"))
+    } else {
+        normalize(&format!("{source_root}/{path}"))
+    }
+}
+
+fn is_absolute_like(path: &str) -> bool {
+    path.starts_with('/') || is_windows_drive_absolute(path)
+}
+
+fn is_windows_drive_absolute(path: &str) -> bool {
+    let bytes = path.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes[2] == b'/'
+}
+
 pub(super) fn normalize(path: &str) -> String {
     let path = path.replace('\\', "/");
-    if let Some(path) = path.strip_prefix("//?/UNC/") {
+    let path = if let Some(path) = path.strip_prefix("//?/UNC/") {
         format!("//{path}")
     } else {
         path.strip_prefix("//?/").unwrap_or(&path).to_string()
+    };
+    lexical_normalize(&path)
+}
+
+fn lexical_normalize(path: &str) -> String {
+    let (prefix, remainder) = if let Some(remainder) = path.strip_prefix("//") {
+        ("//", remainder)
+    } else if let Some(remainder) = path.strip_prefix('/') {
+        ("/", remainder)
+    } else if is_windows_drive_absolute(path) {
+        (&path[..3], &path[3..])
+    } else {
+        ("", path)
+    };
+    let mut parts = Vec::new();
+    for part in remainder.split('/') {
+        match part {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|previous| *previous != "..") => {
+                parts.pop();
+            }
+            ".." if prefix.is_empty() => parts.push(part),
+            ".." => {}
+            _ => parts.push(part),
+        }
     }
+    format!("{prefix}{}", parts.join("/"))
 }
 
 #[cfg(test)]
@@ -185,6 +253,36 @@ mod tests {
             normalize(r"\\?\UNC\server\share\crate\src\lib.rs"),
             "//server/share/crate/src/lib.rs"
         );
+    }
+
+    #[test]
+    fn cargo_llvm_cov_relative_filenames_are_anchored_to_the_manifest_root() {
+        let value = serde_json::json!({
+            "cargo_llvm_cov": {
+                "manifest_path": r"\\?\C:\work\kaspa\Cargo.toml"
+            },
+            "data": [{
+                "totals": {"lines": {"percent": 100.0}},
+                "files": [{
+                    "filename":"consensus/core/./src/../src/lib.rs",
+                    "segments":[[1,1,1]]
+                }]
+            }]
+        });
+        let mut evidence = parse_value(Path::new("coverage.json"), &value);
+        assert!(evidence.files.contains_key("C:/work/kaspa/consensus/core/src/lib.rs"));
+        retain_package_scope(
+            &mut evidence,
+            &["C:/work/kaspa/consensus/core".into()],
+            &[],
+        );
+        assert_eq!(evidence.status, EvidenceStatus::Available);
+    }
+
+    #[test]
+    fn source_path_normalization_is_lexical_and_cross_platform() {
+        assert_eq!(normalize("/ws/./consensus/core/../src/lib.rs"), "/ws/consensus/src/lib.rs");
+        assert_eq!(normalize(r"C:\ws\crate\.\src\..\lib.rs"), "C:/ws/crate/lib.rs");
     }
 
     #[test]

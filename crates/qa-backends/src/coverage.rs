@@ -8,6 +8,7 @@ mod model;
 mod parse;
 mod plan;
 mod runner;
+mod tooling;
 
 #[derive(Debug, Clone, Default)]
 pub struct CoverageEvidence {
