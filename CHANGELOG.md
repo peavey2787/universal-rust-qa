@@ -1,3 +1,8 @@
+## 2026-09-01 - r57 final progressive coverage rustfmt repair
+
+- Applied the two remaining stable Rust 1.98 `rustfmt` changes reported by the r56 Windows run: removed redundant blank lines in coverage parse regressions and wrapped the progressive coverage runner import list at rustfmt's exact boundary.
+- No runtime behavior, coverage semantics, strict thresholds, package semantic versions, GPL-v2-only licensing, or Clippy `-D warnings` policy changed. The r56 Windows run had already passed `cargo check`, the full workspace `cargo test` suite, doctests, and `cargo qa doctor`; only `cargo fmt --check` remained.
+
 ## 2026-09-01 - r56 progressive coverage Windows prerequisite repair
 
 - Applied the exact stable Rust 1.98 `rustfmt` layout reported by the r55 Windows full-test run across the progressive coverage modules and dashboard.

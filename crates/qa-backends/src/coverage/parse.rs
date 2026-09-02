@@ -200,7 +200,6 @@ mod tests {
         assert!(evidence.percent.is_none());
     }
 
-
     #[test]
     fn nested_failed_package_is_not_credited_to_a_covered_parent_package() {
         let value = serde_json::json!({
@@ -217,5 +216,4 @@ mod tests {
         assert!(evidence.files.contains_key("/ws/src/lib.rs"));
         assert!(!evidence.files.contains_key("/ws/crates/failed/src/lib.rs"));
     }
-
 }

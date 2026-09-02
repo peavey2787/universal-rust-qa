@@ -1,8 +1,8 @@
 use super::{
     CoverageEvidence,
     execute::{
-        AttemptSpec, TestMode, count_profiles, coverage_env, optional_modes, prepare_coverage_target,
-        run_attempt, target_variants, test_args,
+        AttemptSpec, TestMode, count_profiles, coverage_env, optional_modes,
+        prepare_coverage_target, run_attempt, target_variants, test_args,
     },
     manifest::not_applicable_evidence,
     plan::workspace_packages,
