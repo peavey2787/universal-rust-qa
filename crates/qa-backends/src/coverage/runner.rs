@@ -36,11 +36,10 @@ pub(super) fn collect_progressive(
     config: &QaConfig,
     output: &Path,
 ) -> CoverageEvidence {
-    let target = match prepare_coverage_target(output) {
+    let mut target = match prepare_coverage_target(output) {
         Ok(target) => target,
         Err(error) => return finalize::failed(error),
     };
-    let env = coverage_env(&target);
     if !workspace.join("Cargo.toml").is_file() {
         return not_applicable_evidence(
             output,
@@ -70,8 +69,30 @@ pub(super) fn collect_progressive(
         return finalize::failed(error);
     }
 
-    let target_variants = target_variants(&config.coverage);
     let mut attempts = Vec::new();
+    if direct_primary_enabled(&config.coverage) {
+        if let Some(recovered) =
+            recovery::collect_primary_direct_report(workspace, output, &packages, &mut attempts)
+        {
+            if all_packages_measured(&packages, &recovered.package_names) {
+                return finalize::finalize_direct(
+                    output,
+                    workspace_count,
+                    static_not_applicable,
+                    &packages,
+                    recovered,
+                    attempts,
+                );
+            }
+        }
+        target = match prepare_coverage_target(output) {
+            Ok(target) => target,
+            Err(error) => return finalize::failed(error),
+        };
+    }
+
+    let env = coverage_env(&target);
+    let target_variants = target_variants(&config.coverage);
     let mut states = initial_states(&packages);
     let mut degraded = execute_coverage_plan(
         workspace,
@@ -110,6 +131,21 @@ pub(super) fn collect_progressive(
         attempts,
         degraded,
     )
+}
+
+fn direct_primary_enabled(config: &qa_policy::CoverageConfig) -> bool {
+    config.targets.is_empty()
+        && config.features.is_empty()
+        && !config.no_default_features
+        && !config.all_features
+}
+
+fn all_packages_measured(
+    packages: &[super::model::CoveragePackage],
+    measured_names: &[String],
+) -> bool {
+    packages.len() == measured_names.len()
+        && packages.iter().all(|package| measured_names.contains(&package.name))
 }
 
 fn initial_states(packages: &[super::model::CoveragePackage]) -> BTreeMap<String, PackageState> {

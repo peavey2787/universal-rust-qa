@@ -104,7 +104,6 @@ pub(super) fn workspace_direct_report_args(
     let mut args = vec![
         "llvm-cov".into(),
         "--ignore-run-fail".into(),
-        "--no-fail-fast".into(),
         "--json".into(),
         "--output-path".into(),
         path.display().to_string(),
@@ -126,7 +125,6 @@ pub(super) fn direct_report_args(
     let mut args = vec![
         "llvm-cov".into(),
         "--ignore-run-fail".into(),
-        "--no-fail-fast".into(),
         "-p".into(),
         package.name.clone(),
         "--json".into(),
@@ -333,6 +331,7 @@ pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> 
     }
     let target = output.join("llvm-cov-target");
     reset_directory(&target, "coverage target")?;
+    reset_directory(&output.join("llvm-cov-primary"), "coverage primary target")?;
     reset_directory(&output.join("llvm-cov-rescue"), "coverage rescue target")?;
     Ok(target)
 }

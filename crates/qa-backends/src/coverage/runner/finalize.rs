@@ -4,18 +4,57 @@ use super::super::{
     manifest::{
         failed_report_detail, metadata_failure, partial_detail, scope_percent, write_manifest,
     },
-    model::{CoverageAttempt, CoverageManifest},
+    model::{CoverageAttempt, CoverageManifest, CoveragePackage},
     parse,
 };
 use super::{
     CoverageScope,
-    recovery::{recover_direct_reports, recover_workspace_direct_report},
+    recovery::{DirectRecovery, recover_direct_reports, recover_workspace_direct_report},
 };
 use qa_model::EvidenceStatus;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+
+pub(super) fn finalize_direct(
+    output: &Path,
+    workspace_count: usize,
+    static_not_applicable: Vec<String>,
+    packages: &[CoveragePackage],
+    recovered: DirectRecovery,
+    attempts: Vec<CoverageAttempt>,
+) -> CoverageEvidence {
+    let covered_roots = packages.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
+    let eligible_package_names =
+        packages.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+    let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
+    let degraded = recovered.degraded || recovered.evidence.status == EvidenceStatus::Partial;
+    finish_collection(
+        output,
+        Some(recovered.evidence),
+        CoverageManifest {
+            schema: 1,
+            status: String::new(),
+            workspace_packages: workspace_count,
+            eligible_packages: packages.len(),
+            covered_packages: packages.len(),
+            failed_packages: 0,
+            not_applicable_packages: static_not_applicable.len(),
+            eligible_source_loc,
+            covered_source_loc: eligible_source_loc,
+            profile_count: recovered.profile_count,
+            eligible_package_names: eligible_package_names.clone(),
+            covered_package_names: eligible_package_names,
+            failed_package_names: vec![],
+            not_applicable_package_names: static_not_applicable,
+            covered_package_roots: covered_roots,
+            excluded_package_roots: vec![],
+            attempts,
+        },
+        degraded,
+    )
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn finalize_progressive(

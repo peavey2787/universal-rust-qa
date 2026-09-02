@@ -208,6 +208,47 @@ fn project_default_is_used_only_for_unfiltered_implicit_host_scope() {
 }
 
 #[test]
+fn direct_workspace_json_is_the_primary_path_for_normal_host_coverage() {
+    let mut config = QaConfig::default();
+    assert!(direct_primary_enabled(&config.coverage));
+
+    config.coverage.features = vec!["special".into()];
+    assert!(!direct_primary_enabled(&config.coverage));
+    config.coverage.features.clear();
+
+    config.coverage.no_default_features = true;
+    assert!(!direct_primary_enabled(&config.coverage));
+    config.coverage.no_default_features = false;
+
+    config.coverage.all_features = true;
+    assert!(!direct_primary_enabled(&config.coverage));
+    config.coverage.all_features = false;
+
+    config.coverage.targets = vec!["wasm32-unknown-unknown".into()];
+    assert!(!direct_primary_enabled(&config.coverage));
+}
+
+#[test]
+fn direct_primary_requires_every_selected_package_before_short_circuiting() {
+    let packages = vec![
+        super::super::model::CoveragePackage {
+            name: "consensus".into(),
+            root: "/workspace/consensus".into(),
+            source_loc: 10,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "wallet".into(),
+            root: "/workspace/wallet".into(),
+            source_loc: 20,
+            default_member: true,
+        },
+    ];
+    assert!(all_packages_measured(&packages, &["consensus".into(), "wallet".into()]));
+    assert!(!all_packages_measured(&packages, &["consensus".into()]));
+}
+
+#[test]
 fn successful_project_default_marks_only_metadata_default_members() {
     let packages = vec![
         super::super::model::CoveragePackage {

@@ -115,7 +115,7 @@ fn workspace_direct_recovery_matches_manual_json_collection_contract() {
     let args = workspace_direct_report_args(&packages, None, path);
     assert_eq!(args[0], "llvm-cov");
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
-    assert!(args.iter().any(|arg| arg == "--no-fail-fast"));
+    assert!(!args.iter().any(|arg| arg == "--no-fail-fast"));
     assert!(args.iter().any(|arg| arg == "--json"));
     assert!(
         args.windows(2)
@@ -144,7 +144,7 @@ fn direct_report_recovery_is_package_scoped_and_generates_json() {
     );
     assert!(args.iter().any(|arg| arg == "--coverage-target-only"));
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
-    assert!(args.iter().any(|arg| arg == "--no-fail-fast"));
+    assert!(!args.iter().any(|arg| arg == "--no-fail-fast"));
     assert!(!args.iter().any(|arg| arg == "--no-report"));
     assert!(!args.iter().any(|arg| arg == "--no-clean"));
 }
