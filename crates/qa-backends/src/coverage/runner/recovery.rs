@@ -185,10 +185,7 @@ fn fresh_primary_report_path(output: &Path, label: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    output.join(format!(
-        ".llvm-cov-primary-{label}-{}-{stamp}.json",
-        std::process::id()
-    ))
+    output.join(format!(".llvm-cov-primary-{label}-{}-{stamp}.json", std::process::id()))
 }
 
 fn persist_primary_report(

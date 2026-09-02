@@ -1,3 +1,8 @@
+## 2026-09-02 - r67 r66 rustfmt repair
+
+- Applied the exact stable Rust formatting reported by the Windows `cargo fmt --check` run across the r66 direct coverage changes.
+- No coverage behavior, external-workspace handling, automatic cargo-llvm-cov provisioning, package semantic version, strict threshold, GPL-v2-only licensing, mutation policy, or Clippy `-D warnings` policy changed.
+
 ## 2026-09-02 - r66 make direct coverage independent from QA bookkeeping
 
 - Made ordinary automatic coverage genuinely direct-first. QA now verifies/installs `cargo-llvm-cov`, writes the plain manual JSON contract `cargo llvm-cov --json --output-path <fresh-report>` to a unique fresh report path, and parses that exact file before Cargo metadata parsing, package-source LOC enumeration, progressive target cleanup, package isolation, or raw-profile merging. If the plain run produces no usable JSON, QA retries once with `--ignore-run-fail` before entering the progressive fallback.

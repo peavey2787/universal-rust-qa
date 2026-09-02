@@ -303,9 +303,12 @@ fn direct_primary_retains_raw_json_when_package_path_attribution_is_unknown() {
     assert!(evidence.files.contains_key("unexpected/path/src/lib.rs"));
     assert_eq!(evidence.eligible_packages, 1);
     assert_eq!(evidence.covered_packages, 0);
-    assert!(evidence.error.as_deref().is_some_and(|error| {
-        error.contains("raw LLVM line evidence was retained")
-    }));
+    assert!(
+        evidence
+            .error
+            .as_deref()
+            .is_some_and(|error| { error.contains("raw LLVM line evidence was retained") })
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -386,8 +389,11 @@ fn direct_primary_never_loses_valid_llvm_percent_when_scope_filtering_is_empty()
     assert_eq!(evidence.status, EvidenceStatus::Partial);
     assert_eq!(evidence.percent, Some(61.25));
     assert!(evidence.files.contains_key("unattributed/generated/source.rs"));
-    assert!(evidence.error.as_deref().is_some_and(|error| {
-        error.contains("raw LLVM evidence was retained")
-    }));
+    assert!(
+        evidence
+            .error
+            .as_deref()
+            .is_some_and(|error| { error.contains("raw LLVM evidence was retained") })
+    );
     fs::remove_dir_all(root).unwrap();
 }

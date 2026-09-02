@@ -97,12 +97,7 @@ pub(super) fn report_args(path: &Path, tolerant: bool) -> Vec<String> {
 }
 
 pub(super) fn primary_direct_report_args(path: &Path) -> Vec<String> {
-    vec![
-        "llvm-cov".into(),
-        "--json".into(),
-        "--output-path".into(),
-        path.display().to_string(),
-    ]
+    vec!["llvm-cov".into(), "--json".into(), "--output-path".into(), path.display().to_string()]
 }
 
 pub(super) fn tolerant_direct_report_args(path: &Path) -> Vec<String> {
@@ -331,9 +326,8 @@ pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
 }
 
 pub(super) fn prepare_primary_coverage_output(output: &Path) -> Result<(), String> {
-    fs::create_dir_all(output).map_err(|error| {
-        format!("failed to create coverage output {}: {error}", output.display())
-    })
+    fs::create_dir_all(output)
+        .map_err(|error| format!("failed to create coverage output {}: {error}", output.display()))
 }
 
 pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> {

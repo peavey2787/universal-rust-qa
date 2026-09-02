@@ -77,14 +77,7 @@ pub(super) fn collect_progressive(
                     recovered.evidence.error = Some(format!(
                         "package/source scope bookkeeping failed after cargo llvm-cov produced valid JSON: {error}"
                     ));
-                    return finalize::finalize_direct(
-                        output,
-                        0,
-                        vec![],
-                        &[],
-                        recovered,
-                        attempts,
-                    );
+                    return finalize::finalize_direct(output, 0, vec![], &[], recovered, attempts);
                 }
             }
         }

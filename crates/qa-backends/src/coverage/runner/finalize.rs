@@ -430,9 +430,10 @@ pub(super) fn metadata_error_with_attempts(
 }
 
 fn first_attempt_failure(attempts: &[CoverageAttempt]) -> String {
-    let Some(attempt) = attempts.iter().find(|attempt| {
-        attempt.configuration != "metadata" && attempt.outcome != "success"
-    }) else {
+    let Some(attempt) = attempts
+        .iter()
+        .find(|attempt| attempt.configuration != "metadata" && attempt.outcome != "success")
+    else {
         return String::new();
     };
     let diagnostic = attempt.diagnostic.as_deref().unwrap_or("no diagnostic output");
