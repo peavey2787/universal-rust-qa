@@ -229,7 +229,8 @@ fn direct_workspace_json_is_the_primary_path_for_normal_host_coverage() {
 }
 
 #[test]
-fn direct_primary_requires_every_selected_package_before_short_circuiting() {
+fn direct_primary_keeps_numeric_partial_coverage_when_some_packages_have_no_report_files() {
+    let root = temp_dir("direct-partial");
     let packages = vec![
         super::super::model::CoveragePackage {
             name: "consensus".into(),
@@ -238,14 +239,37 @@ fn direct_primary_requires_every_selected_package_before_short_circuiting() {
             default_member: true,
         },
         super::super::model::CoveragePackage {
-            name: "wallet".into(),
-            root: "/workspace/wallet".into(),
+            name: "macro-helper".into(),
+            root: "/workspace/macro-helper".into(),
             source_loc: 20,
             default_member: true,
         },
     ];
-    assert!(all_packages_measured(&packages, &["consensus".into(), "wallet".into()]));
-    assert!(!all_packages_measured(&packages, &["consensus".into()]));
+    let recovered = recovery::DirectRecovery {
+        evidence: CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(50.0),
+            source: Some(root.join("llvm-cov.json").display().to_string()),
+            files: std::collections::BTreeMap::from([(
+                "/workspace/consensus/src/lib.rs".into(),
+                std::collections::BTreeMap::from([(1, 1), (2, 0)]),
+            )]),
+            ..CoverageEvidence::default()
+        },
+        package_names: vec!["consensus".into()],
+        profile_count: 2,
+        degraded: false,
+    };
+    let evidence = finalize::finalize_direct(&root, 2, vec![], &packages, recovered, vec![]);
+    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.percent, Some(50.0));
+    assert_eq!(evidence.eligible_packages, 2);
+    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.failed_packages, 1);
+    assert_eq!(evidence.eligible_source_loc, 30);
+    assert_eq!(evidence.covered_source_loc, 10);
+    assert!(evidence.failure_manifest.is_some());
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]

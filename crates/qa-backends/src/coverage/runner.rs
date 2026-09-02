@@ -74,16 +74,14 @@ pub(super) fn collect_progressive(
         if let Some(recovered) =
             recovery::collect_primary_direct_report(workspace, output, &packages, &mut attempts)
         {
-            if all_packages_measured(&packages, &recovered.package_names) {
-                return finalize::finalize_direct(
-                    output,
-                    workspace_count,
-                    static_not_applicable,
-                    &packages,
-                    recovered,
-                    attempts,
-                );
-            }
+            return finalize::finalize_direct(
+                output,
+                workspace_count,
+                static_not_applicable,
+                &packages,
+                recovered,
+                attempts,
+            );
         }
         target = match prepare_coverage_target(output) {
             Ok(target) => target,
@@ -138,14 +136,6 @@ fn direct_primary_enabled(config: &qa_policy::CoverageConfig) -> bool {
         && config.features.is_empty()
         && !config.no_default_features
         && !config.all_features
-}
-
-fn all_packages_measured(
-    packages: &[super::model::CoveragePackage],
-    measured_names: &[String],
-) -> bool {
-    packages.len() == measured_names.len()
-        && packages.iter().all(|package| measured_names.contains(&package.name))
 }
 
 fn initial_states(packages: &[super::model::CoveragePackage]) -> BTreeMap<String, PackageState> {

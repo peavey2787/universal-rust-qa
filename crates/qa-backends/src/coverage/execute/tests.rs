@@ -109,6 +109,17 @@ fn diagnostics_distinguish_native_bindgen_target_test_and_build_failures() {
 }
 
 #[test]
+fn primary_direct_collection_matches_plain_manual_json_contract() {
+    let path = Path::new("qa-out/llvm-cov.json");
+    let args = primary_direct_report_args(path);
+    assert_eq!(
+        args,
+        vec!["llvm-cov", "--ignore-run-fail", "--json", "--output-path", "qa-out/llvm-cov.json"]
+    );
+    assert!(!args.iter().any(|arg| arg == "-p" || arg == "--workspace"));
+}
+
+#[test]
 fn workspace_direct_recovery_matches_manual_json_collection_contract() {
     let path = Path::new("qa-out/workspace.json");
     let packages = [package("consensus"), package("wallet")];

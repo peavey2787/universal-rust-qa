@@ -1,8 +1,8 @@
 use super::super::{
     CoverageEvidence,
     execute::{
-        AttemptSpec, TestMode, count_profiles, direct_report_args, run_attempt,
-        workspace_direct_report_args,
+        AttemptSpec, TestMode, count_profiles, direct_report_args, primary_direct_report_args,
+        run_attempt, workspace_direct_report_args,
     },
     model::{CoverageAttempt, CoveragePackage},
     parse,
@@ -42,7 +42,7 @@ pub(super) fn collect_primary_direct_report(
             target: None,
             configuration: "direct-workspace-primary",
             mode: TestMode::DirectReport,
-            args: workspace_direct_report_args(packages, None, &path),
+            args: primary_direct_report_args(&path),
         },
     );
     let degraded = attempt.outcome != "success";

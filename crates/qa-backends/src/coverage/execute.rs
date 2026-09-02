@@ -96,18 +96,22 @@ pub(super) fn report_args(path: &Path, tolerant: bool) -> Vec<String> {
     args
 }
 
-pub(super) fn workspace_direct_report_args(
-    packages: &[CoveragePackage],
-    target: Option<&str>,
-    path: &Path,
-) -> Vec<String> {
-    let mut args = vec![
+pub(super) fn primary_direct_report_args(path: &Path) -> Vec<String> {
+    vec![
         "llvm-cov".into(),
         "--ignore-run-fail".into(),
         "--json".into(),
         "--output-path".into(),
         path.display().to_string(),
-    ];
+    ]
+}
+
+pub(super) fn workspace_direct_report_args(
+    packages: &[CoveragePackage],
+    target: Option<&str>,
+    path: &Path,
+) -> Vec<String> {
+    let mut args = primary_direct_report_args(path);
     for package in packages {
         args.extend(["-p".into(), package.name.clone()]);
     }

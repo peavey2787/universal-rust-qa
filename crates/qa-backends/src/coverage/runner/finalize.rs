@@ -25,31 +25,54 @@ pub(super) fn finalize_direct(
     recovered: DirectRecovery,
     attempts: Vec<CoverageAttempt>,
 ) -> CoverageEvidence {
-    let covered_roots = packages.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
+    let measured = packages
+        .iter()
+        .filter(|package| recovered.package_names.contains(&package.name))
+        .collect::<Vec<_>>();
+    let covered_roots = measured.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
+    let excluded_roots = packages
+        .iter()
+        .filter(|package| !recovered.package_names.contains(&package.name))
+        .map(|package| package.root.clone())
+        .collect::<Vec<_>>();
     let eligible_package_names =
         packages.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+    let covered_package_names =
+        measured.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+    let failed_package_names = packages
+        .iter()
+        .filter(|package| !recovered.package_names.contains(&package.name))
+        .map(|package| package.name.clone())
+        .collect::<Vec<_>>();
     let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
-    let degraded = recovered.degraded || recovered.evidence.status == EvidenceStatus::Partial;
+    let covered_source_loc = measured.iter().map(|package| package.source_loc).sum();
+    let mut evidence = recovered.evidence;
+    if usable_coverage(&evidence) {
+        parse::retain_package_scope(&mut evidence, &covered_roots, &excluded_roots);
+    }
+    let degraded = recovered.degraded
+        || evidence.status == EvidenceStatus::Partial
+        || measured.len() != packages.len();
     finish_collection(
         output,
-        Some(recovered.evidence),
+        Some(evidence),
         CoverageManifest {
             schema: 1,
             status: String::new(),
             workspace_packages: workspace_count,
             eligible_packages: packages.len(),
-            covered_packages: packages.len(),
-            failed_packages: 0,
+            covered_packages: measured.len(),
+            failed_packages: failed_package_names.len(),
             not_applicable_packages: static_not_applicable.len(),
             eligible_source_loc,
-            covered_source_loc: eligible_source_loc,
+            covered_source_loc,
             profile_count: recovered.profile_count,
-            eligible_package_names: eligible_package_names.clone(),
-            covered_package_names: eligible_package_names,
-            failed_package_names: vec![],
+            eligible_package_names,
+            covered_package_names,
+            failed_package_names,
             not_applicable_package_names: static_not_applicable,
             covered_package_roots: covered_roots,
-            excluded_package_roots: vec![],
+            excluded_package_roots: excluded_roots,
             attempts,
         },
         degraded,

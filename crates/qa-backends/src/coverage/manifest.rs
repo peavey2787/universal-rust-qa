@@ -85,7 +85,7 @@ pub(super) fn partial_detail(manifest: &CoverageManifest) -> String {
     let failed_packages = package_list(&manifest.failed_package_names);
     let failure = first_failure_detail(&manifest.attempts);
     format!(
-        "coverage partial: {:.1}% source scope; {}/{} eligible packages measured; {} package(s) had no successful baseline coverage{failed_packages}; {failed_attempts} collection attempt(s) failed{failure}; {} raw profile(s) retained",
+        "coverage partial: {:.1}% source scope; {}/{} eligible packages measured; {} package(s) had no usable line coverage evidence{failed_packages}; {failed_attempts} collection attempt(s) failed{failure}; {} raw profile(s) retained",
         scope_percent(manifest.covered_source_loc, manifest.eligible_source_loc).unwrap_or(0.0),
         manifest.covered_packages,
         manifest.eligible_packages,
