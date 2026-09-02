@@ -1,3 +1,8 @@
+## 2026-09-02 - r61 r60 rustfmt repair
+
+- Applied the exact stable Rust formatting reported by the Windows `cargo fmt --check` run across the r60 external-workspace coverage recovery changes.
+- No coverage behavior, Kaspa workspace handling, automatic cargo-llvm-cov provisioning, package semantic version, strict threshold, GPL-v2-only licensing, mutation policy, or Clippy `-D warnings` policy changed.
+
 ## 2026-09-02 - r60 external-workspace coverage recovery
 
 - Made fresh external-project coverage self-provisioning instead of assuming `cargo-llvm-cov` is already installed. Coverage now probes `cargo llvm-cov --version`, installs `cargo-llvm-cov` with stable Cargo when the subcommand is missing (bootstrapping the stable rustup toolchain when necessary), then continues to use `CARGO_LLVM_COV_SETUP=yes` so the inspected toolchain can provision its matching `llvm-tools-preview` component non-interactively. Real preflight errors still fail closed instead of being mislabeled as missing tooling.

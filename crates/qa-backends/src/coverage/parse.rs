@@ -201,10 +201,7 @@ fn is_absolute_like(path: &str) -> bool {
 
 fn is_windows_drive_absolute(path: &str) -> bool {
     let bytes = path.as_bytes();
-    bytes.len() >= 3
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[1] == b':'
-        && bytes[2] == b'/'
+    bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/'
 }
 
 pub(super) fn normalize(path: &str) -> String {
@@ -271,11 +268,7 @@ mod tests {
         });
         let mut evidence = parse_value(Path::new("coverage.json"), &value);
         assert!(evidence.files.contains_key("C:/work/kaspa/consensus/core/src/lib.rs"));
-        retain_package_scope(
-            &mut evidence,
-            &["C:/work/kaspa/consensus/core".into()],
-            &[],
-        );
+        retain_package_scope(&mut evidence, &["C:/work/kaspa/consensus/core".into()], &[]);
         assert_eq!(evidence.status, EvidenceStatus::Available);
     }
 

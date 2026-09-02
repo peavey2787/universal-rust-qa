@@ -47,11 +47,8 @@ pub(super) fn recover_workspace_direct_report(
     let profile_count = count_profiles(&rescue_target);
     attempts.push(attempt);
     let roots = scope.eligible.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
-    let excluded = scope
-        .runtime_not_applicable
-        .iter()
-        .map(|package| package.root.clone())
-        .collect::<Vec<_>>();
+    let excluded =
+        scope.runtime_not_applicable.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
     let evidence = parse_scoped_direct_report(&path, &roots, &excluded);
     clear_temporary_report(&path);
     let evidence = evidence?;
@@ -106,11 +103,9 @@ pub(super) fn recover_direct_reports(
             .filter(|candidate| candidate.name != package.name)
             .map(|candidate| candidate.root.clone())
             .collect::<Vec<_>>();
-        if let Some(evidence) = parse_scoped_direct_report(
-            &path,
-            std::slice::from_ref(&package.root),
-            &excluded,
-        ) {
+        if let Some(evidence) =
+            parse_scoped_direct_report(&path, std::slice::from_ref(&package.root), &excluded)
+        {
             parse::merge_evidence(&mut merged, evidence);
             package_names.push(package.name.clone());
         }
@@ -206,10 +201,8 @@ mod tests {
 
     #[test]
     fn workspace_report_ownership_uses_the_most_specific_nested_package_root() {
-        let packages = vec![
-            package("parent", "C:/ws/consensus"),
-            package("child", "C:/ws/consensus/core"),
-        ];
+        let packages =
+            vec![package("parent", "C:/ws/consensus"), package("child", "C:/ws/consensus/core")];
         let evidence = CoverageEvidence {
             status: EvidenceStatus::Available,
             files: BTreeMap::from([

@@ -87,12 +87,9 @@ pub(super) fn finalize_progressive(
     let mut recovery_used = false;
 
     if parsed.as_ref().is_none_or(|evidence| !usable_coverage(evidence)) {
-        if let Some(recovered) = recover_workspace_direct_report(
-            workspace,
-            output,
-            &scope,
-            &mut attempts,
-        ) {
+        if let Some(recovered) =
+            recover_workspace_direct_report(workspace, output, &scope, &mut attempts)
+        {
             degraded |= recovered.degraded;
             profile_count += recovered.profile_count;
             measured_names = recovered.package_names;

@@ -11,9 +11,7 @@ pub(super) fn ensure_llvm_cov(workspace: &Path) -> Result<(), String> {
 
     install(workspace)?;
     probe(workspace).map_err(|error| {
-        format!(
-            "cargo-llvm-cov is still unavailable after automatic installation: {error}"
-        )
+        format!("cargo-llvm-cov is still unavailable after automatic installation: {error}")
     })
 }
 
@@ -28,12 +26,8 @@ fn probe(workspace: &Path) -> Result<(), String> {
 }
 
 fn install(workspace: &Path) -> Result<(), String> {
-    let stable_args = vec![
-        "+stable".into(),
-        "install".into(),
-        "--locked".into(),
-        "cargo-llvm-cov".into(),
-    ];
+    let stable_args =
+        vec!["+stable".into(), "install".into(), "--locked".into(), "cargo-llvm-cov".into()];
     if command_succeeds(workspace, "cargo", &stable_args) {
         return Ok(());
     }
