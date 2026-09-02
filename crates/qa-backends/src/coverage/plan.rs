@@ -13,7 +13,7 @@ pub(super) fn workspace_packages(
     config: &CoverageConfig,
 ) -> Result<(usize, Vec<CoveragePackage>, Vec<String>), String> {
     let args = vec!["metadata".into(), "--no-deps".into(), "--format-version".into(), "1".into()];
-    let output = super::super::process::run_system_cargo(workspace, &args, &[])
+    let output = super::super::process::run(workspace, "cargo", &args, &[])
         .map_err(|error| format!("cargo metadata unavailable: {error}"))?;
     if !output.status.success() {
         return Err(format!(

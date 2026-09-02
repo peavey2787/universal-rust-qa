@@ -1,3 +1,11 @@
+## 2026-09-02 - r70 restore simple direct coverage for self and external projects
+
+- Restored the known-good direct cargo-llvm-cov contract for normal host coverage: QA first runs the plain `cargo llvm-cov --json --output-path <fresh-report>` command from the resolved Cargo workspace. If that command cannot produce usable JSON, QA retries the same direct command once with `--ignore-run-fail`; normal coverage never falls into the progressive raw-profile/package-recovery pipeline.
+- Restored the known-good workspace Cargo launcher and isolated cargo-llvm-cov build/profile directories for the direct path. Coverage now uses the project-resolved Rust toolchain, a short per-process target directory to avoid Windows path growth, and best-effort cleanup that cannot erase an already collected report.
+- A successful direct cargo-llvm-cov process plus valid JSON is authoritative coverage evidence. Package/source attribution remains informational and cannot downgrade successful LLVM evidence merely because a workspace member has no emitted source record. Valid JSON from a nonzero process is retained as Partial instead of N/A.
+- Hardened extracted-project discovery in both the CLI and coverage backend. A real Cargo root is preserved unchanged, while up to three unambiguous archive-wrapper directory levels are resolved before coverage. Ambiguous multiple Cargo projects are never guessed.
+- Advanced the visible development revision to r70. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-02 - r69 resolve extracted Cargo project roots
 
 - Fixed external-project root resolution for extracted repositories. When the invocation directory itself has no `Cargo.toml` but contains exactly one immediate child directory that does, `cargo qa` now treats that child as the project root before any scanners or coverage backends run. This prevents static analysis from recursively finding Rust code while coverage incorrectly exits as `NotApplicable` at the outer extraction wrapper.

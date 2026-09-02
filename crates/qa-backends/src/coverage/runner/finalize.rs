@@ -25,52 +25,50 @@ pub(super) fn finalize_direct(
     recovered: DirectRecovery,
     attempts: Vec<CoverageAttempt>,
 ) -> CoverageEvidence {
-    let measured = packages
-        .iter()
-        .filter(|package| recovered.package_names.contains(&package.name))
-        .collect::<Vec<_>>();
+    let command_complete = !recovered.degraded;
+    let measured = if command_complete {
+        packages.iter().collect::<Vec<_>>()
+    } else {
+        packages
+            .iter()
+            .filter(|package| recovered.package_names.contains(&package.name))
+            .collect::<Vec<_>>()
+    };
     let covered_roots = measured.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
-    let excluded_roots = packages
-        .iter()
-        .filter(|package| !recovered.package_names.contains(&package.name))
-        .map(|package| package.root.clone())
-        .collect::<Vec<_>>();
+    let excluded_roots = if command_complete {
+        vec![]
+    } else {
+        packages
+            .iter()
+            .filter(|package| !recovered.package_names.contains(&package.name))
+            .map(|package| package.root.clone())
+            .collect::<Vec<_>>()
+    };
     let eligible_package_names =
         packages.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
     let covered_package_names =
         measured.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let failed_package_names = packages
-        .iter()
-        .filter(|package| !recovered.package_names.contains(&package.name))
-        .map(|package| package.name.clone())
-        .collect::<Vec<_>>();
+    let failed_package_names = if command_complete {
+        vec![]
+    } else {
+        packages
+            .iter()
+            .filter(|package| !recovered.package_names.contains(&package.name))
+            .map(|package| package.name.clone())
+            .collect::<Vec<_>>()
+    };
     let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
     let covered_source_loc = measured.iter().map(|package| package.source_loc).sum();
     let mut evidence = recovered.evidence;
-    let raw_evidence = evidence.clone();
-    if usable_coverage(&evidence) && !measured.is_empty() {
-        parse::retain_package_scope(&mut evidence, &covered_roots, &excluded_roots);
-        if !usable_coverage(&evidence) && usable_coverage(&raw_evidence) {
-            evidence = raw_evidence;
-            evidence.status = EvidenceStatus::Partial;
-            evidence.error = Some(append_error(
-                evidence.error.take(),
-                "package scope filtering could not retain executable lines; raw LLVM evidence was retained"
-                    .into(),
-            ));
-        }
-    }
-    if measured.is_empty() && usable_coverage(&evidence) {
+    if recovered.degraded && usable_coverage(&evidence) {
         evidence.status = EvidenceStatus::Partial;
         evidence.error = Some(append_error(
             evidence.error.take(),
-            "cargo llvm-cov produced usable JSON, but QA could not attribute its source paths to Cargo package roots; raw LLVM line evidence was retained"
+            "cargo llvm-cov returned nonzero but produced usable JSON; measured coverage was retained"
                 .into(),
         ));
     }
-    let degraded = recovered.degraded
-        || evidence.status == EvidenceStatus::Partial
-        || measured.len() != packages.len();
+    let degraded = recovered.degraded || evidence.status == EvidenceStatus::Partial;
     finish_collection(
         output,
         Some(evidence),
@@ -97,7 +95,6 @@ pub(super) fn finalize_direct(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn finalize_progressive(
     workspace: &Path,
     output: &Path,

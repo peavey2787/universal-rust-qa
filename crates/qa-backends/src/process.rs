@@ -39,19 +39,6 @@ fn apply_runtime_env(command: &mut Command) {
     });
 }
 
-pub fn run_system_cargo(
-    workspace: &Path,
-    args: &[String],
-    envs: &[(&str, String)],
-) -> io::Result<Output> {
-    let mut command = Command::new("cargo");
-    command.current_dir(workspace).args(args);
-    apply_runtime_env(&mut command);
-    clear_conflicting_rustflags(&mut command, envs);
-    apply_envs(&mut command, envs);
-    execute(command, &command_label("cargo", args), None)
-}
-
 pub fn run(
     workspace: &Path,
     program: &str,

@@ -9,7 +9,11 @@ use super::{
     plan::workspace_packages,
 };
 use qa_policy::QaConfig;
-use std::{collections::BTreeMap, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
 
 mod finalize;
 mod recovery;
@@ -37,16 +41,17 @@ pub(super) fn collect_progressive(
     config: &QaConfig,
     output: &Path,
 ) -> CoverageEvidence {
-    if !workspace.join("Cargo.toml").is_file() {
+    let Some(workspace) = resolve_cargo_workspace(workspace) else {
         return not_applicable_evidence(
             output,
             0,
             vec![],
             0,
             vec![],
-            "coverage not applicable: inspected root has no Cargo.toml",
+            "coverage not applicable: no unambiguous Cargo.toml was found at the inspected root or its extraction wrapper",
         );
-    }
+    };
+    let workspace = workspace.as_path();
 
     let mut attempts = Vec::new();
     let direct_enabled = direct_primary_enabled(&config.coverage);
@@ -81,6 +86,16 @@ pub(super) fn collect_progressive(
                 }
             }
         }
+        return finalize::finish_collection(
+            output,
+            None,
+            super::model::CoverageManifest {
+                schema: 1,
+                attempts,
+                ..super::model::CoverageManifest::default()
+            },
+            true,
+        );
     }
 
     let (workspace_count, packages, static_not_applicable) =
@@ -98,10 +113,8 @@ pub(super) fn collect_progressive(
             "no selected workspace members have Cargo-testable targets",
         );
     }
-    if !direct_enabled {
-        if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
-            return finalize::failed(error);
-        }
+    if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
+        return finalize::failed(error);
     }
 
     let target = match prepare_coverage_target(output) {
@@ -150,8 +163,42 @@ pub(super) fn collect_progressive(
     )
 }
 
+fn resolve_cargo_workspace(root: &Path) -> Option<PathBuf> {
+    if root.join("Cargo.toml").is_file() {
+        return Some(root.to_path_buf());
+    }
+
+    let mut level = vec![root.to_path_buf()];
+    for _ in 0..3 {
+        let mut next = Vec::new();
+        let mut candidates = Vec::new();
+        for directory in level {
+            let entries = fs::read_dir(directory).ok()?;
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                if path.join("Cargo.toml").is_file() {
+                    candidates.push(path);
+                } else {
+                    next.push(path);
+                }
+            }
+        }
+        match candidates.len() {
+            0 => level = next,
+            1 => return candidates.pop(),
+            _ => return None,
+        }
+    }
+    None
+}
+
 fn direct_primary_enabled(config: &qa_policy::CoverageConfig) -> bool {
     config.targets.is_empty()
+        && config.include_packages.is_empty()
+        && config.exclude_packages.is_empty()
         && config.features.is_empty()
         && !config.no_default_features
         && !config.all_features

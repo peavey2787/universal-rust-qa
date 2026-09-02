@@ -43,13 +43,32 @@ fn single_cargo_wrapper(root: &Path) -> Option<PathBuf> {
     if root.join("Cargo.toml").is_file() {
         return None;
     }
-    let mut candidates = fs::read_dir(root)
-        .ok()?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.is_dir() && path.join("Cargo.toml").is_file());
-    let candidate = candidates.next()?;
-    candidates.next().is_none().then_some(candidate)
+
+    let mut level = vec![root.to_path_buf()];
+    for _ in 0..3 {
+        let mut next = Vec::new();
+        let mut candidates = Vec::new();
+        for directory in level {
+            let entries = fs::read_dir(directory).ok()?;
+            for entry in entries.filter_map(Result::ok) {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                if path.join("Cargo.toml").is_file() {
+                    candidates.push(path);
+                } else {
+                    next.push(path);
+                }
+            }
+        }
+        match candidates.len() {
+            0 => level = next,
+            1 => return candidates.pop(),
+            _ => return None,
+        }
+    }
+    None
 }
 
 fn native_tool_path(path: PathBuf) -> PathBuf {
@@ -350,6 +369,19 @@ mod tests {
         let outer = root("cargo-wrapper");
         fs::remove_file(outer.join("Cargo.toml")).unwrap();
         let inner = outer.join("rusty-kaspa-master");
+        fs::create_dir_all(&inner).unwrap();
+        fs::write(inner.join("Cargo.toml"), "[workspace]\n").unwrap();
+
+        assert_eq!(workspace(&outer, &PathOptions::default()).unwrap(), inner);
+        fs::remove_dir_all(outer).unwrap();
+    }
+
+    #[test]
+    fn workspace_resolution_unwraps_multiple_archive_directories() {
+        let outer = root("cargo-double-wrapper");
+        fs::remove_file(outer.join("Cargo.toml")).unwrap();
+        let wrapper = outer.join("download");
+        let inner = wrapper.join("rusty-kaspa-master");
         fs::create_dir_all(&inner).unwrap();
         fs::write(inner.join("Cargo.toml"), "[workspace]\n").unwrap();
 

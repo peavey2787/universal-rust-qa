@@ -28,8 +28,8 @@ pub(super) fn collect_primary_direct_report(
     output: &Path,
     attempts: &mut Vec<CoverageAttempt>,
 ) -> Option<DirectRecovery> {
-    let target = output.join("llvm-cov-primary");
-    let env = super::super::execute::primary_coverage_env();
+    let target = fresh_primary_target_path(output);
+    let env = super::super::execute::coverage_env(&target);
 
     let primary_path = fresh_primary_report_path(output, "plain");
     let primary = run_attempt(
@@ -47,11 +47,13 @@ pub(super) fn collect_primary_direct_report(
     let primary_failed = primary.outcome != "success";
     attempts.push(primary);
     if let Some(evidence) = parse_direct_report(&primary_path) {
+        let profile_count = count_profiles(&target);
         let evidence = persist_primary_report(output, &primary_path, evidence);
+        cleanup_primary_target(&target);
         return Some(DirectRecovery {
             evidence,
             package_names: vec![],
-            profile_count: count_profiles(&target),
+            profile_count,
             degraded: primary_failed,
         });
     }
@@ -70,14 +72,18 @@ pub(super) fn collect_primary_direct_report(
             args: tolerant_direct_report_args(&tolerant_path),
         },
     );
+    let tolerant_failed = tolerant.outcome != "success";
     attempts.push(tolerant);
-    let evidence = parse_direct_report(&tolerant_path)?;
+    let evidence = parse_direct_report(&tolerant_path);
+    let profile_count = count_profiles(&target);
+    cleanup_primary_target(&target);
+    let evidence = evidence?;
     let evidence = persist_primary_report(output, &tolerant_path, evidence);
     Some(DirectRecovery {
         evidence,
         package_names: vec![],
-        profile_count: count_profiles(&target),
-        degraded: true,
+        profile_count,
+        degraded: tolerant_failed,
     })
 }
 
@@ -178,6 +184,21 @@ pub(super) fn recover_direct_reports(
         return None;
     }
     Some(DirectRecovery { evidence: merged, package_names, profile_count, degraded })
+}
+
+fn fresh_primary_target_path(output: &Path) -> PathBuf {
+    output.join(format!(".cov-target-{}", std::process::id()))
+}
+
+fn cleanup_primary_target(path: &Path) {
+    match fs::remove_dir_all(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => eprintln!(
+            "warning: failed to remove temporary coverage target {}: {error}",
+            path.display()
+        ),
+    }
 }
 
 fn fresh_primary_report_path(output: &Path, label: &str) -> PathBuf {

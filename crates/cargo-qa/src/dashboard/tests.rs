@@ -173,7 +173,7 @@ fn live_dashboard_renders_pending_running_paused_and_complete_states() {
         elapsed_seconds: 65,
     };
     let pending_text = live_dashboard_text(&config, &pending);
-    assert!(pending_text.contains("UNIVERSAL RUST QA r69"));
+    assert!(pending_text.contains("UNIVERSAL RUST QA r70"));
     assert!(pending_text.contains("HEALTH   N/A"));
     assert!(pending_text.contains("coverage"));
     assert!(pending_text.contains("cargo llvm-cov"));

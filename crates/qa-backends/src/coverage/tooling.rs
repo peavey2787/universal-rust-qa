@@ -22,7 +22,7 @@ pub(super) fn ensure_llvm_cov(workspace: &Path) -> Result<(), String> {
 
 fn probe(workspace: &Path) -> Result<(), String> {
     let args = vec!["llvm-cov".into(), "--version".into()];
-    let output = super::super::process::run_system_cargo(workspace, &args, &[])
+    let output = super::super::process::run(workspace, "cargo", &args, &[])
         .map_err(|error| error.to_string())?;
     if output.status.success() {
         return Ok(());
@@ -50,13 +50,13 @@ fn install(workspace: &Path) -> Result<(), String> {
     }
 
     let fallback_args = vec!["install".into(), "--locked".into(), "cargo-llvm-cov".into()];
-    let output = super::super::process::run_system_cargo(workspace, &fallback_args, &[])
+    let output = super::super::process::run(workspace, "cargo", &fallback_args, &[])
         .map_err(|error| format!("automatic cargo-llvm-cov installation failed: {error}"))?;
     if output.status.success() {
         return Ok(());
     }
     let compatible_args = compatible_install_args();
-    let compatible = super::super::process::run_system_cargo(workspace, &compatible_args, &[])
+    let compatible = super::super::process::run(workspace, "cargo", &compatible_args, &[])
         .map_err(|error| format!("compatible cargo-llvm-cov installation failed: {error}"))?;
     if compatible.status.success() {
         return Ok(());
@@ -83,12 +83,8 @@ fn compatible_install_args() -> Vec<String> {
 }
 
 fn command_succeeds(workspace: &Path, program: &str, args: &[String]) -> bool {
-    let result = if program == "cargo" {
-        super::super::process::run_system_cargo(workspace, args, &[])
-    } else {
-        super::super::process::run(workspace, program, args, &[])
-    };
-    result.is_ok_and(|output| output.status.success())
+    super::super::process::run(workspace, program, args, &[])
+        .is_ok_and(|output| output.status.success())
 }
 
 #[cfg(test)]

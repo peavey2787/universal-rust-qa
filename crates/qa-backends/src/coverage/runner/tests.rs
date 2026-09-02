@@ -226,10 +226,18 @@ fn direct_workspace_json_is_the_primary_path_for_normal_host_coverage() {
 
     config.coverage.targets = vec!["wasm32-unknown-unknown".into()];
     assert!(!direct_primary_enabled(&config.coverage));
+    config.coverage.targets.clear();
+
+    config.coverage.include_packages = vec!["wallet".into()];
+    assert!(!direct_primary_enabled(&config.coverage));
+    config.coverage.include_packages.clear();
+
+    config.coverage.exclude_packages = vec!["ffi".into()];
+    assert!(!direct_primary_enabled(&config.coverage));
 }
 
 #[test]
-fn direct_primary_keeps_numeric_partial_coverage_when_some_packages_have_no_report_files() {
+fn successful_direct_primary_trusts_cargo_llvm_cov_even_when_a_package_has_no_report_file() {
     let root = temp_dir("direct-partial");
     let packages = vec![
         super::super::model::CoveragePackage {
@@ -261,19 +269,19 @@ fn direct_primary_keeps_numeric_partial_coverage_when_some_packages_have_no_repo
         degraded: false,
     };
     let evidence = finalize::finalize_direct(&root, 2, vec![], &packages, recovered, vec![]);
-    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.status, EvidenceStatus::Available);
     assert_eq!(evidence.percent, Some(50.0));
     assert_eq!(evidence.eligible_packages, 2);
-    assert_eq!(evidence.covered_packages, 1);
-    assert_eq!(evidence.failed_packages, 1);
+    assert_eq!(evidence.covered_packages, 2);
+    assert_eq!(evidence.failed_packages, 0);
     assert_eq!(evidence.eligible_source_loc, 30);
-    assert_eq!(evidence.covered_source_loc, 10);
+    assert_eq!(evidence.covered_source_loc, 30);
     assert!(evidence.failure_manifest.is_some());
     fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn direct_primary_retains_raw_json_when_package_path_attribution_is_unknown() {
+fn successful_direct_primary_does_not_downgrade_unknown_package_path_attribution() {
     let root = temp_dir("direct-unattributed");
     let packages = vec![super::super::model::CoveragePackage {
         name: "kaspa-consensus".into(),
@@ -298,17 +306,12 @@ fn direct_primary_retains_raw_json_when_package_path_attribution_is_unknown() {
     };
 
     let evidence = finalize::finalize_direct(&root, 1, vec![], &packages, recovered, vec![]);
-    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.status, EvidenceStatus::Available);
     assert_eq!(evidence.percent, Some(73.5));
     assert!(evidence.files.contains_key("unexpected/path/src/lib.rs"));
     assert_eq!(evidence.eligible_packages, 1);
-    assert_eq!(evidence.covered_packages, 0);
-    assert!(
-        evidence
-            .error
-            .as_deref()
-            .is_some_and(|error| { error.contains("raw LLVM line evidence was retained") })
-    );
+    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.failed_packages, 0);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -358,7 +361,38 @@ fn non_cargo_repository_reports_coverage_not_applicable_without_invoking_cargo()
 }
 
 #[test]
-fn direct_primary_never_loses_valid_llvm_percent_when_scope_filtering_is_empty() {
+fn cargo_workspace_resolution_keeps_a_real_workspace_root() {
+    let root = temp_dir("cargo-root");
+    fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+    assert_eq!(resolve_cargo_workspace(&root), Some(root.clone()));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn cargo_workspace_resolution_unwraps_multiple_archive_directories() {
+    let root = temp_dir("cargo-double-wrapper");
+    let first = root.join("download");
+    let project = first.join("rusty-kaspa-master");
+    fs::create_dir_all(&project).unwrap();
+    fs::write(project.join("Cargo.toml"), "[workspace]\n").unwrap();
+    assert_eq!(resolve_cargo_workspace(&root), Some(project));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn cargo_workspace_resolution_refuses_ambiguous_projects() {
+    let root = temp_dir("cargo-ambiguous-wrapper");
+    for name in ["one", "two"] {
+        let project = root.join(name);
+        fs::create_dir_all(&project).unwrap();
+        fs::write(project.join("Cargo.toml"), "[workspace]\n").unwrap();
+    }
+    assert_eq!(resolve_cargo_workspace(&root), None);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn successful_direct_primary_never_scope_filters_valid_llvm_json() {
     let root = temp_dir("direct-scope-empty");
     let packages = vec![super::super::model::CoveragePackage {
         name: "kaspa-consensus".into(),
@@ -386,14 +420,10 @@ fn direct_primary_never_loses_valid_llvm_percent_when_scope_filtering_is_empty()
     };
 
     let evidence = finalize::finalize_direct(&root, 1, vec![], &packages, recovered, vec![]);
-    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.status, EvidenceStatus::Available);
     assert_eq!(evidence.percent, Some(61.25));
     assert!(evidence.files.contains_key("unattributed/generated/source.rs"));
-    assert!(
-        evidence
-            .error
-            .as_deref()
-            .is_some_and(|error| { error.contains("raw LLVM evidence was retained") })
-    );
+    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.failed_packages, 0);
     fs::remove_dir_all(root).unwrap();
 }

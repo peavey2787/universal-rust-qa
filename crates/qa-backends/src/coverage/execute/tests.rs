@@ -202,12 +202,6 @@ fn environment_auto_provisions_llvm_tools_without_prompting() {
 }
 
 #[test]
-fn primary_environment_does_not_override_cargo_llvm_cov_target_directories() {
-    let env = primary_coverage_env();
-    assert_eq!(env, vec![("CARGO_LLVM_COV_SETUP", "yes".into())]);
-}
-
-#[test]
 fn primary_output_setup_does_not_touch_existing_evidence_or_fallback_targets() {
     let root = std::env::temp_dir().join(format!(
         "urqa-primary-output-reset-{}-{}",

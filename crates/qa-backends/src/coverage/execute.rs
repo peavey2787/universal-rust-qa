@@ -158,7 +158,7 @@ pub(super) fn run_attempt(
     let AttemptSpec { package, target, configuration, mode, args } = spec;
     let before = count_profiles(target_dir);
     let result = crate::process::with_cargo_target_dir(None, || {
-        crate::process::run_system_cargo(workspace, &args, env)
+        crate::process::run(workspace, "cargo", &args, env)
     });
     let after = count_profiles(target_dir);
     let result = classify_result(result);
@@ -310,10 +310,6 @@ fn native_build_failure(text: &str) -> bool {
 
 fn test_failure(text: &str) -> bool {
     ["test result: failed", "test failed"].iter().any(|needle| text.contains(needle))
-}
-
-pub(super) fn primary_coverage_env() -> Vec<(&'static str, String)> {
-    vec![("CARGO_LLVM_COV_SETUP", "yes".into())]
 }
 
 pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
