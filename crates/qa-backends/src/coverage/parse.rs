@@ -107,6 +107,56 @@ fn merge_segments(lines: &mut BTreeMap<usize, u64>, segments: Option<&Vec<Value>
     }
 }
 
+pub(super) fn merge_evidence(into: &mut CoverageEvidence, other: CoverageEvidence) {
+    for (path, lines) in other.files {
+        let merged = into.files.entry(path).or_default();
+        for (line, count) in lines {
+            merged.entry(line).and_modify(|value| *value = (*value).max(count)).or_insert(count);
+        }
+    }
+    recompute_percent(into);
+}
+
+pub(super) fn write_merged_json(path: &Path, evidence: &CoverageEvidence) -> Result<(), String> {
+    let files = evidence
+        .files
+        .iter()
+        .map(|(filename, lines)| {
+            let segments = lines
+                .iter()
+                .map(|(line, count)| serde_json::json!([line, 1, count]))
+                .collect::<Vec<_>>();
+            serde_json::json!({"filename": filename, "segments": segments})
+        })
+        .collect::<Vec<_>>();
+    let value = serde_json::json!({
+        "data": [{
+            "totals": {"lines": {"percent": evidence.percent.unwrap_or(0.0)}},
+            "files": files
+        }]
+    });
+    let bytes = serde_json::to_vec_pretty(&value)
+        .map_err(|error| format!("failed to serialize merged coverage JSON: {error}"))?;
+    fs::write(path, bytes).map_err(|error| {
+        format!("failed to write merged coverage JSON {}: {error}", path.display())
+    })
+}
+
+fn recompute_percent(evidence: &mut CoverageEvidence) {
+    let total = evidence.files.values().map(BTreeMap::len).sum::<usize>();
+    if total == 0 {
+        evidence.percent = None;
+        return;
+    }
+    let covered = evidence
+        .files
+        .values()
+        .flat_map(|lines| lines.values())
+        .filter(|count| **count > 0)
+        .count();
+    evidence.percent = Some(100.0 * covered as f64 / total as f64);
+}
+
 fn failed(error: String) -> CoverageEvidence {
     CoverageEvidence {
         status: EvidenceStatus::Failed,
@@ -198,6 +248,29 @@ mod tests {
         retain_package_scope(&mut evidence, &["/ws/good".into()], &[]);
         assert_eq!(evidence.status, EvidenceStatus::Failed);
         assert!(evidence.percent.is_none());
+    }
+
+    #[test]
+    fn direct_reports_merge_line_hits_without_double_counting() {
+        let mut left = CoverageEvidence {
+            status: EvidenceStatus::Available,
+            files: BTreeMap::from([(
+                "/ws/a/src/lib.rs".into(),
+                BTreeMap::from([(1, 1), (2, 0)]),
+            )]),
+            ..CoverageEvidence::default()
+        };
+        let right = CoverageEvidence {
+            status: EvidenceStatus::Available,
+            files: BTreeMap::from([
+                ("/ws/a/src/lib.rs".into(), BTreeMap::from([(2, 3)])),
+                ("/ws/b/src/lib.rs".into(), BTreeMap::from([(1, 0)])),
+            ]),
+            ..CoverageEvidence::default()
+        };
+        merge_evidence(&mut left, right);
+        assert_eq!(left.files["/ws/a/src/lib.rs"][&2], 3);
+        assert_eq!(left.percent, Some(100.0 * 2.0 / 3.0));
     }
 
     #[test]

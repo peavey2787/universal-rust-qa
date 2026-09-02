@@ -36,13 +36,16 @@ pub(super) fn not_applicable_evidence(
         attempts,
         ..CoverageManifest::default()
     };
-    let failure_manifest = write_manifest(output, &manifest).ok();
+    let (failure_manifest, error) = match write_manifest(output, &manifest) {
+        Ok(path) => (Some(path), detail.to_string()),
+        Err(error) => (None, format!("{detail}; {error}")),
+    };
     CoverageEvidence {
         status: EvidenceStatus::NotApplicable,
         not_applicable_packages,
         profile_count,
         failure_manifest,
-        error: Some(detail.into()),
+        error: Some(error),
         ..CoverageEvidence::default()
     }
 }
@@ -154,10 +157,29 @@ pub(super) fn failed_report_detail(profile_count: usize, manifest: &CoverageMani
         .find(|attempt| attempt.stage == "report")
         .and_then(|attempt| attempt.diagnostic.as_deref())
         .unwrap_or("coverage report was not produced");
+    let collection = manifest
+        .attempts
+        .iter()
+        .find(|attempt| attempt.stage != "report" && attempt.outcome != "success")
+        .map(collection_failure)
+        .unwrap_or_default();
     format!(
         "coverage report finalization failed after collecting {profile_count} raw profile(s): \
-         {report_error}"
+         {report_error}{collection}"
     )
+}
+
+fn collection_failure(attempt: &CoverageAttempt) -> String {
+    let package = attempt.package.as_deref().unwrap_or("workspace");
+    let category = attempt.category.as_deref().unwrap_or("unclassified");
+    let diagnostic = attempt
+        .diagnostic
+        .as_deref()
+        .map(first_diagnostic_line)
+        .filter(|value| !value.is_empty())
+        .map(|value| format!(": {value}"))
+        .unwrap_or_default();
+    format!("; first collection failure {package}/{category}{diagnostic}")
 }
 
 pub(super) fn restore_manifest(output: &Path, evidence: &mut CoverageEvidence) -> bool {

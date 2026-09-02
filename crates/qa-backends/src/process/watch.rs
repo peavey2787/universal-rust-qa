@@ -74,7 +74,7 @@ where
         if let Some(status) = child.try_wait()? {
             #[cfg(windows)]
             if finalized_at.is_some() {
-                let _ = terminate_descendants(pid);
+                report_cleanup_error("terminate finalized descendants", terminate_descendants(pid));
             }
             return Ok(status);
         }
@@ -90,7 +90,7 @@ where
             if complete() {
                 finalized_at = Some(Instant::now());
                 #[cfg(windows)]
-                let _ = terminate_descendants(pid);
+                report_cleanup_error("terminate mutation descendants", terminate_descendants(pid));
                 if let Some((control, _, _)) = controlled {
                     control.set_item("mutation evidence finalized; waiting for process shutdown");
                 }
@@ -126,13 +126,23 @@ pub(super) fn terminate_finalized_process(
     controlled: Option<(&crate::control::RunControl, &str, &StreamReaders)>,
 ) {
     if suspended {
-        let _ = resume_process_tree(pid);
+        report_cleanup_error("resume finalized process tree", resume_process_tree(pid));
     }
     if let Some((control, _, _)) = controlled {
         control.set_item("mutation evidence finalized; terminating lingering process tree");
     }
-    let _ = terminate_process_tree(pid);
-    let _ = child.kill();
+    report_cleanup_error("terminate finalized process tree", terminate_process_tree(pid));
+    if let Err(error) = child.kill() {
+        if error.kind() != io::ErrorKind::InvalidInput {
+            eprintln!("warning: failed to kill finalized child process {pid}: {error}");
+        }
+    }
+}
+
+fn report_cleanup_error(action: &str, result: io::Result<()>) {
+    if let Err(error) = result {
+        eprintln!("warning: {action} failed: {error}");
+    }
 }
 
 fn finish_output_bounded(

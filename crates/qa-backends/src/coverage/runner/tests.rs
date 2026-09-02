@@ -95,6 +95,30 @@ fn one_failed_member_preserves_successful_member_profiles_as_partial_coverage() 
 }
 
 #[test]
+fn usable_partial_report_keeps_numeric_coverage_and_remains_blocking() {
+    let root = temp_dir("usable-partial");
+    let manifest = CoverageManifest {
+        schema: 1,
+        eligible_packages: 1,
+        covered_packages: 1,
+        eligible_source_loc: 40,
+        covered_source_loc: 40,
+        profile_count: 2,
+        ..CoverageManifest::default()
+    };
+    let mut partial = parsed(87.5);
+    partial.status = EvidenceStatus::Partial;
+    partial.error = Some("canonical merged report could not be persisted".into());
+    let evidence = finish_collection(&root, Some(partial), manifest, false);
+    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.percent, Some(87.5));
+    assert!(evidence.error.as_deref().is_some_and(|error| {
+        error.contains("canonical merged report") && error.contains("coverage partial")
+    }));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn optional_all_features_failure_does_not_erase_successful_default_coverage() {
     let root = temp_dir("all-features-failure");
     let manifest = CoverageManifest {
@@ -214,4 +238,16 @@ fn project_default_failure_states_distinguish_retryable_from_tooling() {
     let tooling_failure = attempt(None, "project-default", "unavailable", Some("tooling"), 0, 0);
     assert_eq!(project_default_state(&test_failure), ProjectDefaultState::RetryableFailure);
     assert_eq!(project_default_state(&tooling_failure), ProjectDefaultState::ToolingFailure);
+}
+
+#[test]
+fn non_cargo_repository_reports_coverage_not_applicable_without_invoking_cargo() {
+    let root = temp_dir("non-cargo");
+    fs::write(root.join("README.md"), "not a Cargo workspace\n").unwrap();
+    let output = root.join("qa-out");
+    let evidence = collect_progressive(&root, &QaConfig::default(), &output);
+    assert_eq!(evidence.status, EvidenceStatus::NotApplicable);
+    assert!(evidence.error.as_deref().is_some_and(|error| error.contains("no Cargo.toml")));
+    assert!(output.join("coverage-failures.json").is_file());
+    fs::remove_dir_all(root).unwrap();
 }

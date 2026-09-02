@@ -40,6 +40,16 @@ pub(super) fn collect_progressive(
         Err(error) => return finalize::failed(error),
     };
     let env = coverage_env(&target);
+    if !workspace.join("Cargo.toml").is_file() {
+        return not_applicable_evidence(
+            output,
+            0,
+            vec![],
+            0,
+            vec![],
+            "coverage not applicable: inspected root has no Cargo.toml",
+        );
+    }
     let (workspace_count, packages, static_not_applicable) =
         match workspace_packages(workspace, &config.coverage) {
             Ok(value) => value,
@@ -83,9 +93,8 @@ pub(super) fn collect_progressive(
             "all selected workspace members are incompatible with implicit host coverage",
         );
     }
-    degraded |= scope.incomplete_baseline
-        || !scope.failed_names.is_empty()
-        || states.values().any(|state| state.optional_failed);
+    degraded |= states.values().any(|state| state.optional_failed)
+        || (target_variants.len() > 1 && scope.incomplete_baseline);
     finalize::finalize_progressive(
         workspace,
         output,
@@ -115,10 +124,7 @@ fn execute_coverage_plan(
     states: &mut BTreeMap<String, PackageState>,
 ) -> bool {
     let project_default = run_project_default(workspace, config, target, env, attempts);
-    let mut degraded = matches!(
-        project_default,
-        ProjectDefaultState::RetryableFailure | ProjectDefaultState::ToolingFailure
-    );
+    let mut degraded = false;
     for target_triple in target_variants {
         let baseline_ok = execute_baseline(
             workspace,
