@@ -355,7 +355,12 @@ fn non_cargo_repository_reports_coverage_not_applicable_without_invoking_cargo()
     let output = root.join("qa-out");
     let evidence = collect_progressive(&root, &QaConfig::default(), &output);
     assert_eq!(evidence.status, EvidenceStatus::NotApplicable);
-    assert!(evidence.error.as_deref().is_some_and(|error| error.contains("no Cargo.toml")));
+    assert!(
+        evidence
+            .error
+            .as_deref()
+            .is_some_and(|error| error.contains("no unambiguous Cargo.toml"))
+    );
     assert!(output.join("coverage-failures.json").is_file());
     fs::remove_dir_all(root).unwrap();
 }

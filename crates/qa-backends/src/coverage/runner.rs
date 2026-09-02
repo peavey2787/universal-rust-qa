@@ -153,11 +153,13 @@ pub(super) fn collect_progressive(
     finalize::finalize_progressive(
         workspace,
         output,
-        workspace_count,
-        static_not_applicable,
-        scope,
-        target,
-        env,
+        finalize::ProgressiveFinalizeInput {
+            workspace_count,
+            static_not_applicable,
+            scope,
+            target,
+            env,
+        },
         attempts,
         degraded,
     )

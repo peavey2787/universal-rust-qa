@@ -95,17 +95,28 @@ pub(super) fn finalize_direct(
     )
 }
 
+pub(super) struct ProgressiveFinalizeInput {
+    pub(super) workspace_count: usize,
+    pub(super) static_not_applicable: Vec<String>,
+    pub(super) scope: CoverageScope,
+    pub(super) target: PathBuf,
+    pub(super) env: Vec<(&'static str, String)>,
+}
+
 pub(super) fn finalize_progressive(
     workspace: &Path,
     output: &Path,
-    workspace_count: usize,
-    static_not_applicable: Vec<String>,
-    scope: CoverageScope,
-    target: PathBuf,
-    env: Vec<(&'static str, String)>,
+    input: ProgressiveFinalizeInput,
     mut attempts: Vec<CoverageAttempt>,
     mut degraded: bool,
 ) -> CoverageEvidence {
+    let ProgressiveFinalizeInput {
+        workspace_count,
+        static_not_applicable,
+        scope,
+        target,
+        env,
+    } = input;
     let report_path = output.join("llvm-cov.json");
     let mut profile_count = count_profiles(&target);
     let mut report_ok = false;

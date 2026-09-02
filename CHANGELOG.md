@@ -1,3 +1,9 @@
+## 2026-09-02 - r71 repair r70 strict gates
+
+- Refactored progressive coverage finalization inputs into a dedicated value object so the coverage backend passes strict Clippy `-D warnings` without suppressing `clippy::too_many_arguments`. Coverage behavior is unchanged.
+- Updated the non-Cargo coverage regression to assert the current unambiguous-workspace diagnostic while preserving the `NotApplicable` status and `coverage-failures.json` contract.
+- Advanced the visible development revision to r71. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-02 - r70 restore simple direct coverage for self and external projects
 
 - Restored the known-good direct cargo-llvm-cov contract for normal host coverage: QA first runs the plain `cargo llvm-cov --json --output-path <fresh-report>` command from the resolved Cargo workspace. If that command cannot produce usable JSON, QA retries the same direct command once with `--ignore-run-fail`; normal coverage never falls into the progressive raw-profile/package-recovery pipeline.
