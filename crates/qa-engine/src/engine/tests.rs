@@ -211,6 +211,8 @@ fn forced_coverage_failure_skips_expensive_mutation_but_not_successful_coverage(
 
     let available = CoverageEvidence { status: EvidenceStatus::Available, ..Default::default() };
     assert!(!should_skip_mutation_after_coverage(&options, &available));
+    let partial = CoverageEvidence { status: EvidenceStatus::Partial, ..Default::default() };
+    assert!(!should_skip_mutation_after_coverage(&options, &partial));
     let mutation_only = RunOptions { run_mutation: true, ..RunOptions::existing_coverage() };
     let failed = CoverageEvidence { status: EvidenceStatus::Failed, ..Default::default() };
     assert!(!should_skip_mutation_after_coverage(&mutation_only, &failed));

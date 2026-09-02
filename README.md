@@ -33,7 +33,7 @@ cargo qa export-config FILE
 cargo qa import-config FILE
 ```
 
-Standard `cargo qa` runs now generate fresh `cargo-llvm-cov` coverage automatically when `[coverage] mode = "auto"` (the default), so CRAP and coverage health are based on current evidence instead of silently reusing or missing an old JSON file. Other expensive/nightly backend families still require their focused command or `full`/`release`. Pass `--existing-coverage` (alias `--reuse-coverage`) when you deliberately want to reuse the resolved `llvm-cov.json` for one run, or set `[coverage] mode = "existing"` to make reuse persistent for that project. `[coverage] mode = "off"` remains the explicit way to disable coverage.
+Standard `cargo qa` runs generate fresh progressive `cargo-llvm-cov` coverage automatically when `[coverage] mode = "auto"` (the default). Coverage starts with the project's normal/default test configuration instead of requiring `--all-features`. For workspaces, QA enumerates Cargo members, credits Cargo's actual default members when that first run succeeds, covers remaining compatible members in package groups, and goes directly to per-package isolation after a default/group failure rather than repeating an equivalent whole-workspace attempt. It retains every successful raw LLVM profile and produces one merged report. A native-build failure, WASM/target incompatibility, or failing member therefore produces explicit **Partial** coverage rather than discarding coverage from members that already ran. CRAP is calculated only for functions with measured line evidence; unmeasured files remain `coverage = None`. Other expensive/nightly backend families still require their focused command or `full`/`release`. Pass `--existing-coverage` (alias `--reuse-coverage`) when you deliberately want to reuse prior evidence, or set `[coverage] mode = "existing"` to make reuse persistent. `[coverage] mode = "off"` remains the explicit way to disable coverage.
 
 ## Using Universal Rust QA on another project
 
@@ -61,17 +61,25 @@ cargo qa --project-dir C:\projects\foo --existing-coverage
 cargo qa full --project-dir C:\projects\foo --reuse-coverage
 ```
 
-In external-project mode the reusable file is `<state>/coverage/llvm-cov.json`. If the requested existing file is absent, coverage stays unavailable and the report says to remove the reuse flag or restore `[coverage] mode = "auto"`; Universal Rust QA never fabricates a numeric coverage value.
+In external-project mode coverage evidence lives under `<state>/coverage/`. `llvm-cov.json` contains merged line evidence and `coverage-failures.json` records the machine-readable coverage plan: package, target, feature configuration, command, exit code, failure stage/category, profile counts, and concise diagnostics for every attempt. Final report extraction first uses strict LLVM profile merging; if malformed profiles block that export, QA records the strict failure and may retry tolerant merging, but any recovered number remains **Partial**. Reuse restores both files. If only an old/manual `llvm-cov.json` exists, its measured function coverage remains usable but is marked **Partial** because package/source scope cannot be proven. If the JSON is absent, coverage stays unavailable; Universal Rust QA never fabricates a numeric value.
 
 Cargo-backed checks are executed with the **inspected workspace's active Rust toolchain**, not the toolchain used to build/install Universal Rust QA. When rustup is available, QA resolves the target directory's `rust-toolchain.toml`, `rust-toolchain`, or rustup directory override and launches Cargo through that resolved toolchain; explicit Cargo `+toolchain` jobs (such as MSRV checks) still override it. This prevents an older Universal QA installation toolchain from contaminating coverage or release evidence for a newer project.
 
-Persistent reuse is also available in `qa.toml`:
+Coverage planning is configurable in `qa.toml`:
 
 ```toml
 [coverage]
-mode = "existing"
-all_features = true
+mode = "auto"
+all_features = false
+include_packages = []
+exclude_packages = []
+features = []
+no_default_features = false
+targets = []
+adaptive = true
 ```
+
+`all_features = true` adds an additional package-scoped all-features configuration after default coverage; it does **not** replace the default build or allow a failed all-features attempt to masquerade as complete coverage. `include_packages` and `exclude_packages` control the eligible Cargo workspace set, `features`/`no_default_features` add an explicit feature configuration, `targets` selects explicit Rust target triples instead of implicit-host coverage, and `adaptive` controls compatible-group to per-package fallback. Set only `mode = "existing"` when persistent evidence reuse is desired.
 
 `--project` is an alias for `--project-dir`. External-project mode keeps QA transient state and Cargo build artifacts outside the inspected repository. With no explicit output/state paths it uses `UNIVERSAL_QA_STATE_HOME` when set, otherwise the platform state directory and a stable per-project hash:
 
@@ -113,6 +121,8 @@ QA commands auto-exit by default, but a real terminal still receives the live da
 ## Reports
 
 In local mode, `qa-out/summary.txt` mirrors the terminal summary. In external mode the same report set is written to the resolved `reports/` directory or explicit `--output-dir`. JSON reports include the full report plus structural/test evidence and dedicated state, async, concurrency, errors, secrets, constant-time, sanitizer, differential, fault, MIR, platform, build, layout, FFI, hardware, performance, bloat, hardening, snapshots, documentation, dependencies, API, generated-output, reproducibility, self-hardening, mutation, fuzz, duplicate, dead-code, evidence, and findings outputs.
+
+Coverage reporting distinguishes complete, partial, failed, unavailable, disabled, and not-applicable evidence. Partial summaries include measured line coverage, covered/eligible package counts, covered/eligible source LOC, failed and not-applicable package counts, and retained raw profile count. Source filtering uses the most-specific workspace package root, so a failed nested crate cannot inherit a parent package's covered status. A failed final LLVM export can therefore say that tests produced profiles but report extraction failed, instead of collapsing all execution evidence to `N/A`. Partial coverage is still a strict blocking condition for the overall QA gate.
 
 Strict mutation runs are deliberately fresh verification runs: Universal Rust QA removes the prior cargo-mutants evidence directory before starting a requested campaign, then ingests the new `outcomes.json`. Local mode uses `<project>/mutants.out/`; external mode uses `<state>/mutations/mutants.out/`. Completed cargo-mutants process output is also parsed as a fail-safe so final counts remain reportable if the machine-readable file cannot be read.
 A finalized cargo-mutants campaign is also a shutdown boundary: after `outcomes.json` contains an `end_time` and complete internally consistent outcome counts, Windows descendant cleanup starts while the cargo-mutants parent is still addressable, then QA allows a short parent-exit grace period and retains a bounded process/pipe cleanup fallback instead of waiting indefinitely on inherited handles. The completion probe is throttled and reads only the JSON tail until the final marker appears, avoiding repeated multi-megabyte parses during long campaigns. Finalized disk evidence remains usable if cleanup itself reports an error; incomplete or inconsistent evidence remains fail-closed.

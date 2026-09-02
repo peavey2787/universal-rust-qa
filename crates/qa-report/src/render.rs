@@ -4,11 +4,7 @@ use std::collections::BTreeMap;
 
 pub fn summary_text(report: &QaReport, config: &QaConfig) -> String {
     let s = &report.summary;
-    let coverage = s
-        .coverage
-        .percent
-        .map(|value| format!("{:.2}%", floor_percent(value)))
-        .unwrap_or_else(|| "N/A".into());
+    let coverage = coverage_text(&s.coverage);
     let crap = s.average_crap.map(|v| format!("{v:.2}")).unwrap_or_else(|| "N/A".into());
     let mut families = BTreeMap::<String, (usize, usize, usize)>::new();
     for f in &report.findings {
@@ -66,6 +62,43 @@ pub fn summary_text(report: &QaReport, config: &QaConfig) -> String {
         findings,
         evidence
     )
+}
+
+fn coverage_text(coverage: &qa_model::CoverageSummary) -> String {
+    let percent = coverage
+        .percent
+        .map(|value| format!("{:.2}%", floor_percent(value)))
+        .unwrap_or_else(|| "N/A".into());
+    match coverage.status {
+        EvidenceStatus::Partial => {
+            let scope = coverage
+                .scope_percent
+                .map(|value| format!("{value:.1}%"))
+                .unwrap_or_else(|| "unknown".into());
+            format!(
+                "{percent} PARTIAL | scope {scope} | packages {}/{} | source LOC {}/{} | failed {} | N/A {} | profiles {}",
+                coverage.covered_packages,
+                coverage.eligible_packages,
+                coverage.covered_source_loc,
+                coverage.eligible_source_loc,
+                coverage.failed_packages,
+                coverage.not_applicable_packages,
+                coverage.profile_count
+            )
+        }
+        EvidenceStatus::Available if coverage.eligible_packages > 0 => format!(
+            "{percent} COMPLETE | packages {}/{} | source LOC {}/{} | profiles {}",
+            coverage.covered_packages,
+            coverage.eligible_packages,
+            coverage.covered_source_loc,
+            coverage.eligible_source_loc,
+            coverage.profile_count
+        ),
+        EvidenceStatus::Failed if coverage.profile_count > 0 => {
+            format!("N/A FAILED | {} raw profiles retained", coverage.profile_count)
+        }
+        _ => percent,
+    }
 }
 
 fn floor_percent(value: f64) -> f64 {

@@ -28,7 +28,26 @@ pub(super) fn push_coverage_threshold_finding(
     config: &QaConfig,
     coverage: &qa_backends::coverage::CoverageEvidence,
 ) {
-    if coverage.status != EvidenceStatus::Available
+    if coverage.status == EvidenceStatus::Partial {
+        let message = coverage.scope_percent.map_or_else(
+            || "Coverage is partial: package/source scope is unknown".into(),
+            |scope| {
+                format!(
+                    "Coverage is partial: {}/{} eligible packages measured ({scope:.1}% source scope)",
+                    coverage.covered_packages, coverage.eligible_packages
+                )
+            },
+        );
+        rules.findings.push(Finding {
+            rule_id: "QA-COV-002".into(),
+            severity: Severity::High,
+            message,
+            path: coverage.failure_manifest.clone().or_else(|| coverage.source.clone()),
+            line: None,
+            detail: Some(qa_backends::coverage::detail(coverage)),
+        });
+    }
+    if !matches!(coverage.status, EvidenceStatus::Available | EvidenceStatus::Partial)
         || coverage.percent.unwrap_or(0.0) >= config.metrics.coverage_percent
     {
         return;
@@ -37,14 +56,14 @@ pub(super) fn push_coverage_threshold_finding(
         rule_id: "QA-COV-001".into(),
         severity: Severity::High,
         message: format!(
-            "Workspace coverage {:.2}% is below {:.2}%",
+            "Measured coverage {:.2}% is below {:.2}%",
             floor_percent(coverage.percent.unwrap_or(0.0)),
             config.metrics.coverage_percent
         ),
         path: coverage.source.clone(),
         line: None,
         detail: Some(
-            "Strict coverage remains blocking; increase exercised production code rather than suppressing CRAP or coverage findings."
+            "Strict coverage remains blocking; partial evidence never upgrades unmeasured functions or packages to covered."
                 .into(),
         ),
     });

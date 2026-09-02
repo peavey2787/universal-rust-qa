@@ -36,7 +36,7 @@ fn sdk_default_run_honors_explicitly_disabled_coverage_and_writes_reports() {
     .unwrap();
     let run = run_workspace(&root).unwrap();
     assert_eq!(run.config.profile, "strict");
-    assert_eq!(run.report.schema, 20);
+    assert_eq!(run.report.schema, 21);
     assert!(run.report.functions.iter().any(|function| function.name == "add"));
     assert!(run.output_dir.join("report.json").is_file());
     assert!(run.output_dir.join("summary.txt").is_file());

@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EvidenceStatus {
     Available,
+    Partial,
     Unavailable,
     Disabled,
     Failed,
@@ -89,12 +90,30 @@ pub struct DeadItem {
     pub kind: String,
     pub confidence: String,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CoverageSummary {
     pub percent: Option<f64>,
     pub functions_below_threshold: Option<usize>,
     pub source: Option<String>,
     pub status: EvidenceStatus,
+    #[serde(default)]
+    pub scope_percent: Option<f64>,
+    #[serde(default)]
+    pub eligible_packages: usize,
+    #[serde(default)]
+    pub covered_packages: usize,
+    #[serde(default)]
+    pub failed_packages: usize,
+    #[serde(default)]
+    pub not_applicable_packages: usize,
+    #[serde(default)]
+    pub eligible_source_loc: usize,
+    #[serde(default)]
+    pub covered_source_loc: usize,
+    #[serde(default)]
+    pub profile_count: usize,
+    #[serde(default)]
+    pub failure_manifest: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MutationSummary {

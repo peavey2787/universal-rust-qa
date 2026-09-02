@@ -6,7 +6,7 @@ use qa_policy::QaConfig;
 #[test]
 fn summary_never_fabricates_missing_coverage_or_crap() {
     let report = QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: 0,
         workspace: ".".into(),
         profile: "strict".into(),
@@ -26,6 +26,7 @@ fn summary_never_fabricates_missing_coverage_or_crap() {
                 functions_below_threshold: None,
                 source: None,
                 status: EvidenceStatus::Unavailable,
+                ..CoverageSummary::default()
             },
             mutation: MutationSummary {
                 status: EvidenceStatus::Unavailable,

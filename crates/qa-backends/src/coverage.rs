@@ -1,7 +1,13 @@
 use qa_model::EvidenceStatus;
 use qa_policy::QaConfig;
-use serde_json::Value;
-use std::{collections::BTreeMap, fs, path::Path};
+use std::{collections::BTreeMap, path::Path};
+
+mod execute;
+mod manifest;
+mod model;
+mod parse;
+mod plan;
+mod runner;
 
 #[derive(Debug, Clone, Default)]
 pub struct CoverageEvidence {
@@ -10,6 +16,15 @@ pub struct CoverageEvidence {
     pub source: Option<String>,
     pub error: Option<String>,
     pub files: BTreeMap<String, BTreeMap<usize, u64>>,
+    pub scope_percent: Option<f64>,
+    pub eligible_packages: usize,
+    pub covered_packages: usize,
+    pub failed_packages: usize,
+    pub not_applicable_packages: usize,
+    pub eligible_source_loc: usize,
+    pub covered_source_loc: usize,
+    pub profile_count: usize,
+    pub failure_manifest: Option<String>,
 }
 
 pub fn collect(
@@ -18,115 +33,16 @@ pub fn collect(
     output: &Path,
     force: bool,
 ) -> CoverageEvidence {
-    collect_with(config, output, force, || run_coverage(workspace, config, output))
-}
-
-fn run_coverage(workspace: &Path, config: &QaConfig, output: &Path) -> CoverageCommand {
-    run_coverage_process(workspace, config, output)
-        .map(coverage_command)
-        .unwrap_or_else(CoverageCommand::Unavailable)
-}
-
-fn run_coverage_process(
-    workspace: &Path,
-    config: &QaConfig,
-    output: &Path,
-) -> Result<std::io::Result<std::process::Output>, String> {
-    let path = output.join("llvm-cov.json");
-    let target = prepare_coverage_target(output)?.display().to_string();
-    let args = coverage_args(config, &path);
-    let env = coverage_env(&target);
-    Ok(super::process::with_cargo_target_dir(None, || {
-        super::process::run(workspace, "cargo", &args, &env)
-    }))
-}
-
-fn coverage_env(target: &str) -> [(&'static str, String); 3] {
-    [
-        ("CARGO_LLVM_COV_TARGET_DIR", target.into()),
-        ("CARGO_LLVM_COV_BUILD_DIR", target.into()),
-        ("CARGO_LLVM_COV_SETUP", "yes".into()),
-    ]
-}
-
-fn coverage_args(config: &QaConfig, path: &Path) -> Vec<String> {
-    let mut args = vec![
-        "llvm-cov".into(),
-        "--json".into(),
-        "--output-path".into(),
-        path.display().to_string(),
-    ];
-    if config.coverage.all_features {
-        args.push("--all-features".into());
-    }
-    args
-}
-
-fn prepare_coverage_target(output: &Path) -> Result<std::path::PathBuf, String> {
-    fs::create_dir_all(output).map_err(|error| {
-        format!("failed to create coverage output {}: {error}", output.display())
-    })?;
-    let evidence = output.join("llvm-cov.json");
-    if evidence.exists() {
-        fs::remove_file(&evidence).map_err(|error| {
-            format!("failed to reset coverage evidence {}: {error}", evidence.display())
-        })?;
-    }
-    let target = output.join("llvm-cov-target");
-    if target.exists() {
-        fs::remove_dir_all(&target).map_err(|error| {
-            format!("failed to reset coverage target {}: {error}", target.display())
-        })?;
-    }
-    Ok(target)
-}
-
-#[derive(Debug)]
-enum CoverageCommand {
-    Success,
-    Failed(String),
-    Unavailable(String),
-}
-
-fn coverage_command(result: std::io::Result<std::process::Output>) -> CoverageCommand {
-    match result {
-        Ok(output) if output.status.success() => CoverageCommand::Success,
-        Ok(output) => {
-            CoverageCommand::Failed(super::process::diagnostics(&output.stdout, &output.stderr))
-        }
-        Err(error) => CoverageCommand::Unavailable(error.to_string()),
-    }
-}
-
-fn collect_with(
-    config: &QaConfig,
-    output: &Path,
-    force: bool,
-    command: impl FnOnce() -> CoverageCommand,
-) -> CoverageEvidence {
     if config.coverage.mode == "off" {
-        return CoverageEvidence { status: EvidenceStatus::Disabled, ..Default::default() };
+        return CoverageEvidence { status: EvidenceStatus::Disabled, ..CoverageEvidence::default() };
     }
-    let generate = force && config.coverage.mode != "existing";
-    if generate {
-        match command() {
-            CoverageCommand::Success => {}
-            CoverageCommand::Failed(error) => {
-                return CoverageEvidence {
-                    status: EvidenceStatus::Failed,
-                    error: Some(error),
-                    ..Default::default()
-                };
-            }
-            CoverageCommand::Unavailable(error) => {
-                return CoverageEvidence {
-                    status: EvidenceStatus::Unavailable,
-                    error: Some(error),
-                    ..Default::default()
-                };
-            }
-        }
+    if force && config.coverage.mode != "existing" {
+        return runner::collect_progressive(workspace, config, output);
     }
+    collect_existing(output)
+}
+
+fn collect_existing(output: &Path) -> CoverageEvidence {
     let path = output.join("llvm-cov.json");
     if !path.exists() {
         return CoverageEvidence {
@@ -135,64 +51,19 @@ fn collect_with(
                 "existing cargo-llvm-cov JSON evidence not found; rerun without the coverage reuse flag or set [coverage] mode = \"auto\" to generate fresh coverage"
                     .into(),
             ),
-            ..Default::default()
+            ..CoverageEvidence::default()
         };
     }
-    parse(&path)
-}
-
-fn parse(path: &Path) -> CoverageEvidence {
-    let text = match fs::read_to_string(path) {
-        Ok(value) => value,
-        Err(error) => {
-            return CoverageEvidence {
-                status: EvidenceStatus::Failed,
-                error: Some(error.to_string()),
-                ..Default::default()
-            };
-        }
-    };
-    let value: Value = match serde_json::from_str(&text) {
-        Ok(value) => value,
-        Err(error) => {
-            return CoverageEvidence {
-                status: EvidenceStatus::Failed,
-                error: Some(error.to_string()),
-                ..Default::default()
-            };
-        }
-    };
-
-    let percent = value.pointer("/data/0/totals/lines/percent").and_then(Value::as_f64);
-    let mut files = BTreeMap::new();
-    for file in value.pointer("/data/0/files").and_then(Value::as_array).into_iter().flatten() {
-        let Some(name) = file.get("filename").and_then(Value::as_str) else {
-            continue;
-        };
-        let mut lines = BTreeMap::<usize, u64>::new();
-        if let Some(segments) = file.get("segments").and_then(Value::as_array) {
-            for segment in segments {
-                let Some(parts) = segment.as_array() else {
-                    continue;
-                };
-                let Some(line) = parts.first().and_then(Value::as_u64) else {
-                    continue;
-                };
-                let count = parts.get(2).and_then(Value::as_u64).unwrap_or(0);
-                let line = line as usize;
-                lines.entry(line).and_modify(|value| *value = (*value).max(count)).or_insert(count);
-            }
-        }
-        files.insert(normalize(name), lines);
+    let mut evidence = parse::parse(&path);
+    let has_manifest = runner::restore_manifest(output, &mut evidence);
+    if evidence.status == EvidenceStatus::Available && !has_manifest {
+        evidence.status = EvidenceStatus::Partial;
+        evidence.error = Some(
+            "coverage JSON is usable, but coverage-failures.json is missing; package/source scope is unknown"
+                .into(),
+        );
     }
-
-    CoverageEvidence {
-        status: EvidenceStatus::Available,
-        percent,
-        source: Some(path.display().to_string()),
-        files,
-        ..Default::default()
-    }
+    evidence
 }
 
 pub fn function_percent(
@@ -201,10 +72,10 @@ pub fn function_percent(
     start: usize,
     end: usize,
 ) -> Option<f64> {
-    if evidence.status != EvidenceStatus::Available {
+    if !matches!(evidence.status, EvidenceStatus::Available | EvidenceStatus::Partial) {
         return None;
     }
-    let key = normalize(path);
+    let key = parse::normalize(path);
     let lines = evidence.files.get(&key).or_else(|| {
         evidence
             .files
@@ -220,8 +91,47 @@ pub fn function_percent(
     Some(100.0 * covered as f64 / relevant.len() as f64)
 }
 
-fn normalize(path: &str) -> String {
-    path.replace('\\', "/")
+pub fn detail(evidence: &CoverageEvidence) -> String {
+    match evidence.status {
+        EvidenceStatus::Available => format!(
+            "coverage complete: {:.2}% line coverage; {}/{} eligible packages; {:.1}% source scope; source LOC {}/{}; {} raw profile(s)",
+            evidence.percent.unwrap_or(0.0),
+            evidence.covered_packages,
+            evidence.eligible_packages,
+            evidence.scope_percent.unwrap_or(100.0),
+            evidence.covered_source_loc,
+            evidence.eligible_source_loc,
+            evidence.profile_count
+        ),
+        EvidenceStatus::Partial => {
+            let scope = evidence
+                .scope_percent
+                .map(|value| format!("{value:.1}%"))
+                .unwrap_or_else(|| "unknown".into());
+            let packages = if evidence.eligible_packages > 0 {
+                format!(
+                    "{}/{} eligible packages",
+                    evidence.covered_packages, evidence.eligible_packages
+                )
+            } else {
+                "package scope unknown".into()
+            };
+            let manifest = evidence
+                .failure_manifest
+                .as_deref()
+                .map(|path| format!("; manifest {path}"))
+                .unwrap_or_default();
+            format!(
+                "coverage partial: {:.2}% measured line coverage; {packages}; {scope} source scope; source LOC {}/{}; {} failed package(s); {} raw profile(s){manifest}",
+                evidence.percent.unwrap_or(0.0),
+                evidence.covered_source_loc,
+                evidence.eligible_source_loc,
+                evidence.failed_packages,
+                evidence.profile_count
+            )
+        }
+        _ => evidence.error.clone().unwrap_or_else(|| "coverage evidence not available".into()),
+    }
 }
 
 #[cfg(test)]

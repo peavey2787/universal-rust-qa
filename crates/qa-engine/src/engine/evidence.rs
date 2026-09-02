@@ -8,15 +8,7 @@ pub(super) fn coverage_record(
         check: "workspace".into(),
         status: coverage.status.clone(),
         source: coverage.source.clone(),
-        detail: Some(
-            coverage
-                .error
-                .clone()
-                .or_else(|| {
-                    coverage.percent.map(|percent| format!("workspace line coverage {percent:.2}%"))
-                })
-                .unwrap_or_else(|| "coverage evidence collected".into()),
-        ),
+        detail: Some(qa_backends::coverage::detail(coverage)),
     }
 }
 

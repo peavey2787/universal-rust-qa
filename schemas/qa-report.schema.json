@@ -2,12 +2,157 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Universal Rust QA report",
   "type": "object",
-  "required": ["schema","generated_unix_seconds","workspace","profile","summary","files","functions","evidence","findings"],
+  "required": [
+    "schema",
+    "generated_unix_seconds",
+    "workspace",
+    "profile",
+    "summary",
+    "files",
+    "functions",
+    "evidence",
+    "findings"
+  ],
   "properties": {
-    "schema":{"type":"integer"}, "generated_unix_seconds":{"type":"integer"}, "workspace":{"type":"string"}, "profile":{"type":"string"},
-    "summary":{"type":"object"}, "files":{"type":"array"}, "functions":{"type":"array"}, "types":{"type":"array"}, "interfaces":{"type":"array"},
-    "mutations":{"type":"array"}, "fuzz_targets":{"type":"array"}, "duplicates":{"type":"array"}, "dead_items":{"type":"array"},
-    "evidence":{"type":"array","items":{"type":"object","required":["family","check","status"]}},
-    "findings":{"type":"array","items":{"type":"object","required":["rule_id","severity","message"]}}
+    "schema": {
+      "type": "integer",
+      "minimum": 21
+    },
+    "generated_unix_seconds": {
+      "type": "integer"
+    },
+    "workspace": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "type": "object",
+          "properties": {
+            "percent": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "functions_below_threshold": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "source": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "Available",
+                "Partial",
+                "Unavailable",
+                "Disabled",
+                "Failed",
+                "Unknown",
+                "NotApplicable"
+              ]
+            },
+            "scope_percent": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "eligible_packages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "covered_packages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failed_packages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_applicable_packages": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "eligible_source_loc": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "covered_source_loc": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "profile_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "failure_manifest": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "files": {
+      "type": "array"
+    },
+    "functions": {
+      "type": "array"
+    },
+    "types": {
+      "type": "array"
+    },
+    "interfaces": {
+      "type": "array"
+    },
+    "mutations": {
+      "type": "array"
+    },
+    "fuzz_targets": {
+      "type": "array"
+    },
+    "duplicates": {
+      "type": "array"
+    },
+    "dead_items": {
+      "type": "array"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "family",
+          "check",
+          "status"
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule_id",
+          "severity",
+          "message"
+        ]
+      }
+    }
   }
 }

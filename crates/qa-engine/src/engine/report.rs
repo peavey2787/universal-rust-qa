@@ -19,7 +19,7 @@ pub(super) fn build_report(
 ) -> QaReport {
     let summary = build_summary(config, &rules, &coverage, &mutation, &evidence);
     QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -101,6 +101,15 @@ pub(super) fn build_summary(
             functions_below_threshold: functions_below,
             source: coverage.source.clone(),
             status: coverage.status.clone(),
+            scope_percent: coverage.scope_percent,
+            eligible_packages: coverage.eligible_packages,
+            covered_packages: coverage.covered_packages,
+            failed_packages: coverage.failed_packages,
+            not_applicable_packages: coverage.not_applicable_packages,
+            eligible_source_loc: coverage.eligible_source_loc,
+            covered_source_loc: coverage.covered_source_loc,
+            profile_count: coverage.profile_count,
+            failure_manifest: coverage.failure_manifest.clone(),
         },
         mutation: MutationSummary {
             status: mutation.status.clone(),
@@ -198,7 +207,7 @@ pub(super) fn functions_below_coverage(
     config: &QaConfig,
     coverage: &qa_backends::coverage::CoverageEvidence,
 ) -> Option<usize> {
-    if coverage.status != EvidenceStatus::Available {
+    if !matches!(coverage.status, EvidenceStatus::Available | EvidenceStatus::Partial) {
         return None;
     }
     Some(

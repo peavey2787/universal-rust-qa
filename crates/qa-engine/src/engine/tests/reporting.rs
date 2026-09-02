@@ -81,6 +81,8 @@ fn health_and_coverage_summary_helpers_cover_available_and_missing_evidence() {
     assert_eq!(functions_below_coverage(&rules, &config, &unavailable), None);
     let available = CoverageEvidence { status: EvidenceStatus::Available, ..Default::default() };
     assert_eq!(functions_below_coverage(&rules, &config, &available), Some(1));
+    let partial = CoverageEvidence { status: EvidenceStatus::Partial, ..Default::default() };
+    assert_eq!(functions_below_coverage(&rules, &config, &partial), Some(1));
     assert_eq!(functions_over_cc(&rules, &config), 0);
 }
 
@@ -322,6 +324,19 @@ fn coverage_and_crap_mutation_boundaries_are_exact() {
     push_coverage_threshold_finding(&mut rules, &config, &available_low);
     assert_eq!(rules.findings.len(), 1);
     assert_eq!(rules.findings[0].rule_id, "QA-COV-001");
+
+    let mut partial_rules = RuleOutput::default();
+    let partial = CoverageEvidence {
+        status: EvidenceStatus::Partial,
+        percent: Some(95.0),
+        eligible_packages: 4,
+        covered_packages: 3,
+        scope_percent: Some(75.0),
+        ..Default::default()
+    };
+    push_coverage_threshold_finding(&mut partial_rules, &config, &partial);
+    assert_eq!(partial_rules.findings.len(), 1);
+    assert_eq!(partial_rules.findings[0].rule_id, "QA-COV-002");
     assert!((crap(4, 50.0) - 6.0).abs() < f64::EPSILON);
 }
 

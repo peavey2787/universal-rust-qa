@@ -106,7 +106,7 @@ fn summary_dashboard_text(
         format!(
             "{} flagged | coverage {}",
             summary.invalid_tests,
-            coverage_percent_label(summary.coverage.percent)
+            coverage_label(summary)
         ),
     ));
     output.push_str(&row_text(
@@ -258,8 +258,11 @@ fn provisional_text(summary: &SummaryMetrics) -> &'static str {
         return "";
     }
     match summary.coverage.status {
+        qa_model::EvidenceStatus::Partial => {
+            "  \x1b[38;5;179mprovisional health: coverage collection PARTIAL; measured functions keep real coverage/CRAP while unmeasured packages remain unknown\x1b[0m\n"
+        }
         qa_model::EvidenceStatus::Failed => {
-            "  \x1b[38;5;179mprovisional health: coverage evidence FAILED; CRAP and coverage remain unavailable\x1b[0m\n"
+            "  \x1b[38;5;179mprovisional health: coverage collection FAILED; raw profiles and failure manifest may still contain partial execution evidence\x1b[0m\n"
         }
         qa_model::EvidenceStatus::Disabled => {
             "  \x1b[38;5;179mprovisional health: coverage is disabled; CRAP and coverage remain unavailable\x1b[0m\n"
@@ -281,6 +284,23 @@ fn crap_excess(value: Option<usize>, limit: f64) -> String {
     value
         .map(|value| format!("{value} functions exceed {limit:.1}"))
         .unwrap_or_else(|| "requires coverage evidence".into())
+}
+
+fn coverage_label(summary: &SummaryMetrics) -> String {
+    let percent = coverage_percent_label(summary.coverage.percent);
+    match summary.coverage.status {
+        qa_model::EvidenceStatus::Partial => match summary.coverage.scope_percent {
+            Some(scope) => format!(
+                "{percent} PARTIAL (scope {scope:.1}%, {}/{})",
+                summary.coverage.covered_packages, summary.coverage.eligible_packages
+            ),
+            None => format!("{percent} PARTIAL (scope unknown)"),
+        },
+        qa_model::EvidenceStatus::Failed if summary.coverage.profile_count > 0 => {
+            format!("N/A FAILED ({} raw profiles retained)", summary.coverage.profile_count)
+        }
+        _ => percent,
+    }
 }
 
 fn coverage_percent_label(value: Option<f64>) -> String {

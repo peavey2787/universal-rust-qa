@@ -58,7 +58,33 @@ cfg!(TestConfig {
     reject_unseeded_randomness: bool = true,
     reject_anonymous_ignore: bool = true
 });
-cfg!(CoverageConfig { mode: String = "auto".into(), all_features: bool = true });
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CoverageConfig {
+    pub mode: String,
+    pub all_features: bool,
+    pub include_packages: Vec<String>,
+    pub exclude_packages: Vec<String>,
+    pub features: Vec<String>,
+    pub no_default_features: bool,
+    pub targets: Vec<String>,
+    pub adaptive: bool,
+}
+
+impl Default for CoverageConfig {
+    fn default() -> Self {
+        Self {
+            mode: "auto".into(),
+            all_features: false,
+            include_packages: vec![],
+            exclude_packages: vec![],
+            features: vec![],
+            no_default_features: false,
+            targets: vec![],
+            adaptive: true,
+        }
+    }
+}
 cfg!(MutationConfig {
     mode: String = "existing".into(),
     minimum_kill_percent: f64 = 90.0,

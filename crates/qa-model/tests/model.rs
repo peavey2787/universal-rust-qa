@@ -41,4 +41,6 @@ fn representative_model_types_roundtrip_through_json() {
     assert!(registry.rules.is_empty());
     let status: EvidenceStatus = serde_json::from_str("\"NotApplicable\"").unwrap();
     assert_eq!(status, EvidenceStatus::NotApplicable);
+    let partial: EvidenceStatus = serde_json::from_str("\"Partial\"").unwrap();
+    assert_eq!(partial, EvidenceStatus::Partial);
 }

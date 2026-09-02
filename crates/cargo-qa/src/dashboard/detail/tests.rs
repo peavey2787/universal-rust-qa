@@ -6,7 +6,7 @@ use qa_model::{
 
 fn report_with_files() -> QaReport {
     QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: 0,
         workspace: ".".into(),
         profile: "strict".into(),
@@ -26,6 +26,7 @@ fn report_with_files() -> QaReport {
                 functions_below_threshold: Some(0),
                 source: None,
                 status: EvidenceStatus::Available,
+                ..CoverageSummary::default()
             },
             mutation: MutationSummary {
                 status: EvidenceStatus::Available,

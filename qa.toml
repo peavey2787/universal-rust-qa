@@ -42,7 +42,13 @@ reject_unseeded_randomness=true
 reject_anonymous_ignore=true
 [coverage]
 mode="auto"
-all_features=true
+all_features=false
+include_packages=[]
+exclude_packages=[]
+features=[]
+no_default_features=false
+targets=[]
+adaptive=true
 [mutation]
 mode="existing"
 minimum_kill_percent=90.0

@@ -6,7 +6,7 @@ use qa_model::{
 
 fn report() -> QaReport {
     QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: 0,
         workspace: ".".into(),
         profile: "strict".into(),
@@ -26,6 +26,7 @@ fn report() -> QaReport {
                 functions_below_threshold: Some(4),
                 source: Some("cov.json".into()),
                 status: EvidenceStatus::Available,
+                ..CoverageSummary::default()
             },
             mutation: MutationSummary {
                 status: EvidenceStatus::Available,
@@ -161,4 +162,32 @@ fn summary_counts_multiple_nonblocking_findings_in_the_same_family() {
     ];
     let text = summary_text(&report, &QaConfig::default());
     assert!(text.contains("DOC        critical 0   high 0   other 2"));
+}
+
+#[test]
+fn partial_coverage_summary_exposes_package_source_and_profile_scope() {
+    let mut report = report();
+    report.summary.health_is_provisional = true;
+    report.summary.coverage = CoverageSummary {
+        percent: Some(71.4),
+        functions_below_threshold: Some(12),
+        source: Some("llvm-cov.json".into()),
+        status: EvidenceStatus::Partial,
+        scope_percent: Some(88.0),
+        eligible_packages: 83,
+        covered_packages: 73,
+        failed_packages: 6,
+        not_applicable_packages: 4,
+        eligible_source_loc: 100_000,
+        covered_source_loc: 88_000,
+        profile_count: 75,
+        failure_manifest: Some("coverage-failures.json".into()),
+    };
+    let text = summary_text(&report, &QaConfig::default());
+    assert!(text.contains("coverage 71.40% PARTIAL"));
+    assert!(text.contains("packages 73/83"));
+    assert!(text.contains("source LOC 88000/100000"));
+    assert!(text.contains("failed 6"));
+    assert!(text.contains("N/A 4"));
+    assert!(text.contains("profiles 75"));
 }

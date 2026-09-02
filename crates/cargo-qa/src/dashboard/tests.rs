@@ -6,7 +6,7 @@ use qa_model::{
 
 fn empty_report() -> QaReport {
     QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: 0,
         workspace: ".".into(),
         profile: "strict".into(),
@@ -26,6 +26,7 @@ fn empty_report() -> QaReport {
                 functions_below_threshold: Some(0),
                 source: None,
                 status: EvidenceStatus::Available,
+                ..CoverageSummary::default()
             },
             mutation: MutationSummary {
                 status: EvidenceStatus::Available,
@@ -92,8 +93,15 @@ fn dashboard_action_table_exit_and_location_helpers_are_exact() {
     assert_eq!(provisional_text(&summary), "");
 
     summary.health_is_provisional = true;
+    summary.coverage.status = qa_model::EvidenceStatus::Partial;
+    summary.coverage.percent = Some(96.0);
+    summary.coverage.scope_percent = Some(71.4);
+    summary.coverage.covered_packages = 73;
+    summary.coverage.eligible_packages = 83;
+    assert!(provisional_text(&summary).contains("coverage collection PARTIAL"));
+    assert!(coverage_label(&summary).contains("96.00% PARTIAL (scope 71.4%, 73/83)"));
     summary.coverage.status = qa_model::EvidenceStatus::Failed;
-    assert!(provisional_text(&summary).contains("coverage evidence FAILED"));
+    assert!(provisional_text(&summary).contains("coverage collection FAILED"));
     summary.coverage.status = qa_model::EvidenceStatus::Unavailable;
     assert!(provisional_text(&summary).contains("coverage evidence is unavailable"));
     summary.coverage.status = qa_model::EvidenceStatus::Disabled;
@@ -199,6 +207,7 @@ fn live_dashboard_renders_pending_running_paused_and_complete_states() {
             functions_below_threshold: Some(0),
             source: None,
             status: EvidenceStatus::Available,
+            ..CoverageSummary::default()
         },
         mutation: MutationSummary {
             status: EvidenceStatus::Available,

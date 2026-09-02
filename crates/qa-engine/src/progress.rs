@@ -184,6 +184,7 @@ mod tests {
                 functions_below_threshold: None,
                 source: None,
                 status: qa_model::EvidenceStatus::Unknown,
+                ..qa_model::CoverageSummary::default()
             },
             mutation: qa_model::MutationSummary {
                 status: qa_model::EvidenceStatus::Unknown,

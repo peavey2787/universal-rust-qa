@@ -21,6 +21,14 @@ fn defaults_cover_every_strict_subsystem_and_environment_allowlist() {
     assert_eq!(config.output_dir, "qa-out");
     assert_eq!(config.summary.health_weights.structure, 35);
     assert_eq!(config.metrics.coverage_percent, 90.0);
+    assert_eq!(config.coverage.mode, "auto");
+    assert!(!config.coverage.all_features);
+    assert!(config.coverage.include_packages.is_empty());
+    assert!(config.coverage.exclude_packages.is_empty());
+    assert!(config.coverage.features.is_empty());
+    assert!(!config.coverage.no_default_features);
+    assert!(config.coverage.targets.is_empty());
+    assert!(config.coverage.adaptive);
     assert_eq!(config.mutation.minimum_kill_percent, 90.0);
     assert!(config.safety.require_safety_comment);
     assert!(config.environment.allow_vars.iter().any(|value| value == "PATH"));
@@ -46,11 +54,25 @@ fn save_load_roundtrip_and_absent_configuration_behave_predictably() {
 
     let mut config = QaConfig { profile: "custom".into(), ..QaConfig::default() };
     config.metrics.crap = 9.5;
+    config.coverage.all_features = true;
+    config.coverage.include_packages = vec!["wallet".into()];
+    config.coverage.exclude_packages = vec!["ffi".into()];
+    config.coverage.features = vec!["rpc".into()];
+    config.coverage.no_default_features = true;
+    config.coverage.targets = vec!["wasm32-unknown-unknown".into()];
+    config.coverage.adaptive = false;
     config.hardware.enabled = true;
     config.save(&root.join("qa.toml")).unwrap();
     let loaded = QaConfig::load(&root).unwrap();
     assert_eq!(loaded.profile, "custom");
     assert_eq!(loaded.metrics.crap, 9.5);
+    assert!(loaded.coverage.all_features);
+    assert_eq!(loaded.coverage.include_packages, vec!["wallet"]);
+    assert_eq!(loaded.coverage.exclude_packages, vec!["ffi"]);
+    assert_eq!(loaded.coverage.features, vec!["rpc"]);
+    assert!(loaded.coverage.no_default_features);
+    assert_eq!(loaded.coverage.targets, vec!["wasm32-unknown-unknown"]);
+    assert!(!loaded.coverage.adaptive);
     assert!(loaded.hardware.enabled);
     fs::remove_dir_all(root).unwrap();
 }

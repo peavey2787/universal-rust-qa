@@ -169,7 +169,7 @@ fn enforce_gate(
         .count();
     let coverage_missing = matches!(
         report.summary.coverage.status,
-        EvidenceStatus::Failed | EvidenceStatus::Unavailable
+        EvidenceStatus::Partial | EvidenceStatus::Failed | EvidenceStatus::Unavailable
     );
     let mutation_missing = matches!(
         report.summary.mutation.status,
@@ -183,7 +183,7 @@ fn enforce_gate(
     let missing = usize::from(coverage_missing) + usize::from(mutation_missing) + fuzz_failed;
     if blocking > 0 || failed > 0 || missing > 0 {
         return Err(format!(
-            "QA gate failed: {blocking} high/critical findings, {failed} failed/unavailable backend checks, and {missing} required coverage/mutation/fuzz evidence failures; inspect {} and {}",
+            "QA gate failed: {blocking} high/critical findings, {failed} failed/unavailable backend checks, and {missing} required partial/failed/unavailable coverage/mutation/fuzz evidence failures; inspect {} and {}",
             output_dir.join("summary.txt").display(),
             output_dir.join("report.json").display()
         )
@@ -207,7 +207,7 @@ mod tests {
 
     fn report() -> QaReport {
         QaReport {
-            schema: 20,
+            schema: 21,
             generated_unix_seconds: 0,
             workspace: ".".into(),
             profile: "strict".into(),
@@ -227,6 +227,7 @@ mod tests {
                     functions_below_threshold: Some(0),
                     source: None,
                     status: EvidenceStatus::Available,
+                    ..CoverageSummary::default()
                 },
                 mutation: MutationSummary {
                     status: EvidenceStatus::Available,
@@ -436,6 +437,15 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("1 failed/unavailable")
+        );
+
+        let mut partial = report();
+        partial.summary.coverage.status = EvidenceStatus::Partial;
+        assert!(
+            enforce_gate(&partial, Path::new("reports"))
+                .unwrap_err()
+                .to_string()
+                .contains("1 required")
         );
 
         let mut missing = report();

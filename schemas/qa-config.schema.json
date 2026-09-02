@@ -40,7 +40,51 @@
       "type": "object"
     },
     "coverage": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "existing",
+            "off"
+          ]
+        },
+        "all_features": {
+          "type": "boolean"
+        },
+        "include_packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude_packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "no_default_features": {
+          "type": "boolean"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "adaptive": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     },
     "mutation": {
       "type": "object"

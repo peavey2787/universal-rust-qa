@@ -19,7 +19,7 @@ fn temp_dir() -> PathBuf {
 
 fn report() -> QaReport {
     QaReport {
-        schema: 20,
+        schema: 21,
         generated_unix_seconds: 1,
         workspace: "workspace".into(),
         profile: "strict".into(),
@@ -39,6 +39,7 @@ fn report() -> QaReport {
                 functions_below_threshold: Some(0),
                 source: Some("cov".into()),
                 status: EvidenceStatus::Available,
+                ..CoverageSummary::default()
             },
             mutation: MutationSummary {
                 status: EvidenceStatus::Available,
