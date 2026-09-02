@@ -8,6 +8,8 @@ mod live_ui;
 mod paths;
 mod settings;
 
+pub(crate) const BUILD_REVISION: &str = "r65";
+
 #[cfg(test)]
 use commands::full_options;
 use commands::{basic_action, command_options, is_help};
@@ -33,9 +35,14 @@ fn run() -> CommandResult {
     let path_options = paths::take_path_options(&mut args, &cwd)?;
     let no_interactive = non_interactive(&mut args);
     let existing_coverage = existing_coverage_requested(&mut args);
-    let workspace = paths::workspace(&cwd, &path_options)?;
     let command = args.first().map(String::as_str);
 
+    if command.is_some_and(|value| matches!(value, "--version" | "-V")) {
+        println!("cargo-qa {} ({})", env!("CARGO_PKG_VERSION"), BUILD_REVISION);
+        return Ok(());
+    }
+
+    let workspace = paths::workspace(&cwd, &path_options)?;
     if let Some(action) = command.and_then(basic_action) {
         action(&workspace)?;
         return Ok(());

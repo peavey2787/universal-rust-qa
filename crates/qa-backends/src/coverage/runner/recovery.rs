@@ -29,10 +29,7 @@ pub(super) fn collect_primary_direct_report(
         return None;
     }
     let target = output.join("llvm-cov-primary");
-    if !reset_target(&target) {
-        return None;
-    }
-    let env = super::super::execute::coverage_env(&target);
+    let env = super::super::execute::primary_coverage_env();
     let attempt = run_attempt(
         workspace,
         &target,
@@ -186,25 +183,6 @@ fn clear_temporary_report(path: &Path) -> bool {
     }
 }
 
-fn reset_target(path: &Path) -> bool {
-    match fs::remove_dir_all(path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-        Err(error) => {
-            eprintln!(
-                "warning: failed to reset direct coverage target {}: {error}",
-                path.display()
-            );
-            return false;
-        }
-    }
-    if let Err(error) = fs::create_dir_all(path) {
-        eprintln!("warning: failed to create direct coverage target {}: {error}", path.display());
-        return false;
-    }
-    true
-}
-
 fn common_recovery_target(attempts: &[CoverageAttempt]) -> Option<Option<String>> {
     let targets =
         attempts.iter().filter_map(|attempt| attempt.target.clone()).collect::<BTreeSet<_>>();
@@ -308,20 +286,5 @@ mod tests {
     fn workspace_direct_recovery_is_skipped_for_multiple_explicit_targets() {
         let attempts = vec![attempt_with_target("a"), attempt_with_target("b")];
         assert_eq!(common_recovery_target(&attempts), None);
-    }
-
-    #[test]
-    fn direct_primary_target_is_recreated_from_scratch() {
-        let path = std::env::temp_dir().join(format!(
-            "urqa-direct-primary-target-{}-{}",
-            std::process::id(),
-            module_path!().replace("::", "-")
-        ));
-        fs::create_dir_all(&path).unwrap();
-        fs::write(path.join("stale.profraw"), b"stale").unwrap();
-        assert!(reset_target(&path));
-        assert!(path.is_dir());
-        assert!(!path.join("stale.profraw").exists());
-        fs::remove_dir_all(path).unwrap();
     }
 }

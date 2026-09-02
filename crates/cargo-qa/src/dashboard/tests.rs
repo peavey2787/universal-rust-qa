@@ -136,6 +136,26 @@ fn dashboard_action_table_exit_and_location_helpers_are_exact() {
 }
 
 #[test]
+fn failed_coverage_dashboard_surfaces_the_actual_backend_diagnostic_and_manifest() {
+    let mut report = empty_report();
+    report.summary.health_is_provisional = true;
+    report.summary.coverage.status = EvidenceStatus::Failed;
+    report.summary.coverage.percent = None;
+    report.summary.coverage.failure_manifest = Some("qa-out/coverage-failures.json".into());
+    report.evidence.push(EvidenceRecord {
+        family: "COV".into(),
+        check: "workspace".into(),
+        status: EvidenceStatus::Failed,
+        source: None,
+        detail: Some("cargo llvm-cov failed: linker.exe was not found".into()),
+    });
+
+    let diagnostic = coverage_diagnostic_text(&report);
+    assert!(diagnostic.contains("cargo llvm-cov failed: linker.exe was not found"));
+    assert!(diagnostic.contains("qa-out/coverage-failures.json"));
+}
+
+#[test]
 fn live_dashboard_renders_pending_running_paused_and_complete_states() {
     let config = QaConfig::default();
     let pending = ProgressSnapshot {
@@ -153,6 +173,7 @@ fn live_dashboard_renders_pending_running_paused_and_complete_states() {
         elapsed_seconds: 65,
     };
     let pending_text = live_dashboard_text(&config, &pending);
+    assert!(pending_text.contains("UNIVERSAL RUST QA r65"));
     assert!(pending_text.contains("HEALTH   N/A"));
     assert!(pending_text.contains("coverage"));
     assert!(pending_text.contains("cargo llvm-cov"));

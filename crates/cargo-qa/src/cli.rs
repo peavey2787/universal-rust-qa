@@ -54,6 +54,7 @@ Interactive terminal controls while QA is running:
   C                     skip current external-check category (fail-closed)
 
 Utility commands:
+  --version | -V
   doctor | settings | exceptions | reports
   export-config <file> | import-config <file>"#
     )

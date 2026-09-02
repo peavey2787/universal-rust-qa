@@ -158,7 +158,7 @@ pub(super) fn run_attempt(
     let AttemptSpec { package, target, configuration, mode, args } = spec;
     let before = count_profiles(target_dir);
     let result = crate::process::with_cargo_target_dir(None, || {
-        crate::process::run(workspace, "cargo", &args, env)
+        crate::process::run_system_cargo(workspace, &args, env)
     });
     let after = count_profiles(target_dir);
     let result = classify_result(result);
@@ -312,6 +312,10 @@ fn test_failure(text: &str) -> bool {
     ["test result: failed", "test failed"].iter().any(|needle| text.contains(needle))
 }
 
+pub(super) fn primary_coverage_env() -> Vec<(&'static str, String)> {
+    vec![("CARGO_LLVM_COV_SETUP", "yes".into())]
+}
+
 pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
     let target = target.display().to_string();
     vec![
@@ -335,7 +339,6 @@ pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> 
     }
     let target = output.join("llvm-cov-target");
     reset_directory(&target, "coverage target")?;
-    reset_directory(&output.join("llvm-cov-primary"), "coverage primary target")?;
     reset_directory(&output.join("llvm-cov-rescue"), "coverage rescue target")?;
     Ok(target)
 }

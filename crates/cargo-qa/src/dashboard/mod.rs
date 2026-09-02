@@ -41,6 +41,7 @@ pub fn print_dashboard(report: &QaReport, config: &QaConfig) {
         report.evidence.len(),
         config,
     );
+    output.push_str(&coverage_diagnostic_text(report));
     output.push_str(&format!(
         "\n  {CYAN}R{RESET} Reports   {CYAN}S{RESET} Settings   {CYAN}E{RESET} Exceptions   {CYAN}Q{RESET} Quit\n\n"
     ));
@@ -74,8 +75,8 @@ fn summary_dashboard_text(
         "\n{BOLD}{CYAN}╭────────────────────────────────────────────────────────────────────╮{RESET}\n"
     );
     output.push_str(&format!(
-        "{BOLD}{CYAN}│{RESET}  UNIVERSAL RUST QA    profile {:<12} {health_color}HEALTH {:>5.1}%{RESET}  {BOLD}{CYAN}│{RESET}\n",
-        profile, summary.health_score
+        "{BOLD}{CYAN}│{RESET}  UNIVERSAL RUST QA {}  profile {:<10} {health_color}HEALTH {:>5.1}%{RESET}  {BOLD}{CYAN}│{RESET}\n",
+        crate::BUILD_REVISION, profile, summary.health_score
     ));
     output.push_str(&format!(
         "{BOLD}{CYAN}╰────────────────────────────────────────────────────────────────────╯{RESET}\n"
@@ -134,13 +135,38 @@ fn summary_dashboard_text(
     output
 }
 
+fn coverage_diagnostic_text(report: &QaReport) -> String {
+    if matches!(
+        report.summary.coverage.status,
+        qa_model::EvidenceStatus::Available | qa_model::EvidenceStatus::Disabled
+    ) {
+        return String::new();
+    }
+    let detail = report
+        .evidence
+        .iter()
+        .find(|record| record.family == "COV" && record.check == "workspace")
+        .and_then(|record| record.detail.as_deref());
+    let Some(detail) = detail else {
+        return String::new();
+    };
+    let manifest = report
+        .summary
+        .coverage
+        .failure_manifest
+        .as_deref()
+        .map(|path| format!("\n  {CYAN}coverage manifest{RESET}: {path}"))
+        .unwrap_or_default();
+    format!("  {YELLOW}coverage diagnostic{RESET}: {detail}{manifest}\n")
+}
+
 fn pending_dashboard_text(profile: &str) -> String {
     let mut output = format!(
         "\n{BOLD}{CYAN}╭────────────────────────────────────────────────────────────────────╮{RESET}\n"
     );
     output.push_str(&format!(
-        "{BOLD}{CYAN}│{RESET}  UNIVERSAL RUST QA    profile {:<12} {YELLOW}HEALTH   N/A{RESET}  {BOLD}{CYAN}│{RESET}\n",
-        profile
+        "{BOLD}{CYAN}│{RESET}  UNIVERSAL RUST QA {}  profile {:<10} {YELLOW}HEALTH   N/A{RESET}  {BOLD}{CYAN}│{RESET}\n",
+        crate::BUILD_REVISION, profile
     ));
     output.push_str(&format!(
         "{BOLD}{CYAN}╰────────────────────────────────────────────────────────────────────╯{RESET}\n"
