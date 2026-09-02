@@ -1,3 +1,9 @@
+## 2026-09-02 - r68 restore non-Cargo failure manifest creation
+
+- Fixed the non-Cargo repository coverage path so `coverage-failures.json` is written even when `qa-out/` does not already exist. `write_manifest` now creates its output directory before serializing the manifest, restoring the runner regression contract without changing direct cargo-llvm-cov collection for Cargo workspaces.
+- The existing non-Cargo runner regression now exercises this directory-creation contract, and the visible build revision is advanced to r68.
+- No coverage/CRAP thresholds, package semantic version, GPL-v2-only licensing, mutation policy, or Clippy `-D warnings` policy changed.
+
 ## 2026-09-02 - r67 r66 rustfmt repair
 
 - Applied the exact stable Rust formatting reported by the Windows `cargo fmt --check` run across the r66 direct coverage changes.

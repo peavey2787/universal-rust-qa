@@ -8,6 +8,9 @@ use std::{fs, path::Path};
 pub(super) const MANIFEST_NAME: &str = "coverage-failures.json";
 
 pub(super) fn write_manifest(output: &Path, manifest: &CoverageManifest) -> Result<String, String> {
+    fs::create_dir_all(output).map_err(|error| {
+        format!("failed to create coverage manifest directory {}: {error}", output.display())
+    })?;
     let path = output.join(MANIFEST_NAME);
     let bytes = serde_json::to_vec_pretty(manifest)
         .map_err(|error| format!("failed to serialize coverage failure manifest: {error}"))?;
