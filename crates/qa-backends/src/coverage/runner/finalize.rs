@@ -47,8 +47,26 @@ pub(super) fn finalize_direct(
     let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
     let covered_source_loc = measured.iter().map(|package| package.source_loc).sum();
     let mut evidence = recovered.evidence;
-    if usable_coverage(&evidence) {
+    let raw_evidence = evidence.clone();
+    if usable_coverage(&evidence) && !measured.is_empty() {
         parse::retain_package_scope(&mut evidence, &covered_roots, &excluded_roots);
+        if !usable_coverage(&evidence) && usable_coverage(&raw_evidence) {
+            evidence = raw_evidence;
+            evidence.status = EvidenceStatus::Partial;
+            evidence.error = Some(append_error(
+                evidence.error.take(),
+                "package scope filtering could not retain executable lines; raw LLVM evidence was retained"
+                    .into(),
+            ));
+        }
+    }
+    if measured.is_empty() && usable_coverage(&evidence) {
+        evidence.status = EvidenceStatus::Partial;
+        evidence.error = Some(append_error(
+            evidence.error.take(),
+            "cargo llvm-cov produced usable JSON, but QA could not attribute its source paths to Cargo package roots; raw LLVM line evidence was retained"
+                .into(),
+        ));
     }
     let degraded = recovered.degraded
         || evidence.status == EvidenceStatus::Partial
@@ -386,17 +404,43 @@ fn apply_manifest_fields(
     evidence.failure_manifest = manifest_path;
 }
 
-pub(super) fn metadata_error(output: &Path, error: String) -> CoverageEvidence {
-    let mut manifest =
-        CoverageManifest { schema: 1, status: "failed".into(), ..CoverageManifest::default() };
-    manifest.attempts.push(metadata_failure(error.clone()));
+pub(super) fn metadata_error_with_attempts(
+    output: &Path,
+    error: String,
+    mut attempts: Vec<CoverageAttempt>,
+) -> CoverageEvidence {
+    attempts.push(metadata_failure(error.clone()));
+    let manifest = CoverageManifest {
+        schema: 1,
+        status: "failed".into(),
+        attempts,
+        ..CoverageManifest::default()
+    };
     let (manifest_path, manifest_error) = manifest_result(output, &manifest);
+    let direct_failure = first_attempt_failure(&manifest.attempts);
     CoverageEvidence {
         status: EvidenceStatus::Failed,
-        error: Some(append_error(Some(error), manifest_error.unwrap_or_default())),
+        error: Some(append_error(
+            Some(append_error(Some(error), direct_failure)),
+            manifest_error.unwrap_or_default(),
+        )),
         failure_manifest: manifest_path,
         ..CoverageEvidence::default()
     }
+}
+
+fn first_attempt_failure(attempts: &[CoverageAttempt]) -> String {
+    let Some(attempt) = attempts.iter().find(|attempt| {
+        attempt.configuration != "metadata" && attempt.outcome != "success"
+    }) else {
+        return String::new();
+    };
+    let diagnostic = attempt.diagnostic.as_deref().unwrap_or("no diagnostic output");
+    format!(
+        "preceding {} attempt failed: {}",
+        attempt.configuration,
+        diagnostic.lines().find(|line| !line.trim().is_empty()).unwrap_or(diagnostic).trim()
+    )
 }
 
 pub(super) fn failed(error: String) -> CoverageEvidence {

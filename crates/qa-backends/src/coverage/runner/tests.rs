@@ -273,6 +273,43 @@ fn direct_primary_keeps_numeric_partial_coverage_when_some_packages_have_no_repo
 }
 
 #[test]
+fn direct_primary_retains_raw_json_when_package_path_attribution_is_unknown() {
+    let root = temp_dir("direct-unattributed");
+    let packages = vec![super::super::model::CoveragePackage {
+        name: "kaspa-consensus".into(),
+        root: "C:/work/rusty-kaspa/consensus".into(),
+        source_loc: 10,
+        default_member: true,
+    }];
+    let recovered = recovery::DirectRecovery {
+        evidence: CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(73.5),
+            source: Some(root.join("llvm-cov.json").display().to_string()),
+            files: std::collections::BTreeMap::from([(
+                "unexpected/path/src/lib.rs".into(),
+                std::collections::BTreeMap::from([(1, 1), (2, 0)]),
+            )]),
+            ..CoverageEvidence::default()
+        },
+        package_names: vec![],
+        profile_count: 0,
+        degraded: false,
+    };
+
+    let evidence = finalize::finalize_direct(&root, 1, vec![], &packages, recovered, vec![]);
+    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.percent, Some(73.5));
+    assert!(evidence.files.contains_key("unexpected/path/src/lib.rs"));
+    assert_eq!(evidence.eligible_packages, 1);
+    assert_eq!(evidence.covered_packages, 0);
+    assert!(evidence.error.as_deref().is_some_and(|error| {
+        error.contains("raw LLVM line evidence was retained")
+    }));
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn successful_project_default_marks_only_metadata_default_members() {
     let packages = vec![
         super::super::model::CoveragePackage {
@@ -314,5 +351,43 @@ fn non_cargo_repository_reports_coverage_not_applicable_without_invoking_cargo()
     assert_eq!(evidence.status, EvidenceStatus::NotApplicable);
     assert!(evidence.error.as_deref().is_some_and(|error| error.contains("no Cargo.toml")));
     assert!(output.join("coverage-failures.json").is_file());
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn direct_primary_never_loses_valid_llvm_percent_when_scope_filtering_is_empty() {
+    let root = temp_dir("direct-scope-empty");
+    let packages = vec![super::super::model::CoveragePackage {
+        name: "kaspa-consensus".into(),
+        root: "C:/work/rusty-kaspa/consensus".into(),
+        source_loc: 10,
+        default_member: true,
+    }];
+    let recovered = recovery::DirectRecovery {
+        evidence: CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(61.25),
+            source: Some(root.join("llvm-cov.json").display().to_string()),
+            files: std::collections::BTreeMap::from([
+                ("C:/work/rusty-kaspa/consensus/src/lib.rs".into(), Default::default()),
+                (
+                    "unattributed/generated/source.rs".into(),
+                    std::collections::BTreeMap::from([(1, 1), (2, 0)]),
+                ),
+            ]),
+            ..CoverageEvidence::default()
+        },
+        package_names: vec!["kaspa-consensus".into()],
+        profile_count: 0,
+        degraded: false,
+    };
+
+    let evidence = finalize::finalize_direct(&root, 1, vec![], &packages, recovered, vec![]);
+    assert_eq!(evidence.status, EvidenceStatus::Partial);
+    assert_eq!(evidence.percent, Some(61.25));
+    assert!(evidence.files.contains_key("unattributed/generated/source.rs"));
+    assert!(evidence.error.as_deref().is_some_and(|error| {
+        error.contains("raw LLVM evidence was retained")
+    }));
     fs::remove_dir_all(root).unwrap();
 }

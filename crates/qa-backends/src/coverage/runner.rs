@@ -2,7 +2,8 @@ use super::{
     CoverageEvidence,
     execute::{
         AttemptSpec, TestMode, count_profiles, coverage_env, optional_modes,
-        prepare_coverage_target, run_attempt, target_variants, test_args,
+        prepare_coverage_target, prepare_primary_coverage_output, run_attempt, target_variants,
+        test_args,
     },
     manifest::not_applicable_evidence,
     plan::workspace_packages,
@@ -36,10 +37,6 @@ pub(super) fn collect_progressive(
     config: &QaConfig,
     output: &Path,
 ) -> CoverageEvidence {
-    let mut target = match prepare_coverage_target(output) {
-        Ok(target) => target,
-        Err(error) => return finalize::failed(error),
-    };
     if !workspace.join("Cargo.toml").is_file() {
         return not_applicable_evidence(
             output,
@@ -50,10 +47,53 @@ pub(super) fn collect_progressive(
             "coverage not applicable: inspected root has no Cargo.toml",
         );
     }
+
+    let mut attempts = Vec::new();
+    let direct_enabled = direct_primary_enabled(&config.coverage);
+    if direct_enabled {
+        if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
+            return finalize::failed(error);
+        }
+        if let Err(error) = prepare_primary_coverage_output(output) {
+            return finalize::failed(error);
+        }
+        if let Some(mut recovered) =
+            recovery::collect_primary_direct_report(workspace, output, &mut attempts)
+        {
+            match workspace_packages(workspace, &config.coverage) {
+                Ok((workspace_count, packages, static_not_applicable)) => {
+                    recovered.package_names =
+                        recovery::measured_package_names(&packages, &recovered.evidence);
+                    return finalize::finalize_direct(
+                        output,
+                        workspace_count,
+                        static_not_applicable,
+                        &packages,
+                        recovered,
+                        attempts,
+                    );
+                }
+                Err(error) => {
+                    recovered.evidence.error = Some(format!(
+                        "package/source scope bookkeeping failed after cargo llvm-cov produced valid JSON: {error}"
+                    ));
+                    return finalize::finalize_direct(
+                        output,
+                        0,
+                        vec![],
+                        &[],
+                        recovered,
+                        attempts,
+                    );
+                }
+            }
+        }
+    }
+
     let (workspace_count, packages, static_not_applicable) =
         match workspace_packages(workspace, &config.coverage) {
             Ok(value) => value,
-            Err(error) => return finalize::metadata_error(output, error),
+            Err(error) => return finalize::metadata_error_with_attempts(output, error, attempts),
         };
     if packages.is_empty() {
         return not_applicable_evidence(
@@ -61,34 +101,20 @@ pub(super) fn collect_progressive(
             workspace_count,
             static_not_applicable,
             0,
-            vec![],
+            attempts,
             "no selected workspace members have Cargo-testable targets",
         );
     }
-    if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
-        return finalize::failed(error);
-    }
-
-    let mut attempts = Vec::new();
-    if direct_primary_enabled(&config.coverage) {
-        if let Some(recovered) =
-            recovery::collect_primary_direct_report(workspace, output, &packages, &mut attempts)
-        {
-            return finalize::finalize_direct(
-                output,
-                workspace_count,
-                static_not_applicable,
-                &packages,
-                recovered,
-                attempts,
-            );
+    if !direct_enabled {
+        if let Err(error) = super::tooling::ensure_llvm_cov(workspace) {
+            return finalize::failed(error);
         }
-        target = match prepare_coverage_target(output) {
-            Ok(target) => target,
-            Err(error) => return finalize::failed(error),
-        };
     }
 
+    let target = match prepare_coverage_target(output) {
+        Ok(target) => target,
+        Err(error) => return finalize::failed(error),
+    };
     let env = coverage_env(&target);
     let target_variants = target_variants(&config.coverage);
     let mut states = initial_states(&packages);

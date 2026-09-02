@@ -2,14 +2,19 @@ use super::super::{
     CoverageEvidence,
     execute::{
         AttemptSpec, TestMode, count_profiles, direct_report_args, primary_direct_report_args,
-        run_attempt, workspace_direct_report_args,
+        run_attempt, tolerant_direct_report_args, workspace_direct_report_args,
     },
     model::{CoverageAttempt, CoveragePackage},
     parse,
 };
 use super::CoverageScope;
 use qa_model::EvidenceStatus;
-use std::{collections::BTreeSet, fs, path::Path};
+use std::{
+    collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub(super) struct DirectRecovery {
     pub(super) evidence: CoverageEvidence,
@@ -21,16 +26,13 @@ pub(super) struct DirectRecovery {
 pub(super) fn collect_primary_direct_report(
     workspace: &Path,
     output: &Path,
-    packages: &[CoveragePackage],
     attempts: &mut Vec<CoverageAttempt>,
 ) -> Option<DirectRecovery> {
-    let path = output.join("llvm-cov.json");
-    if !clear_temporary_report(&path) {
-        return None;
-    }
     let target = output.join("llvm-cov-primary");
     let env = super::super::execute::primary_coverage_env();
-    let attempt = run_attempt(
+
+    let primary_path = fresh_primary_report_path(output, "plain");
+    let primary = run_attempt(
         workspace,
         &target,
         &env,
@@ -39,19 +41,44 @@ pub(super) fn collect_primary_direct_report(
             target: None,
             configuration: "direct-workspace-primary",
             mode: TestMode::DirectReport,
-            args: primary_direct_report_args(&path),
+            args: primary_direct_report_args(&primary_path),
         },
     );
-    let degraded = attempt.outcome != "success";
-    let profile_count = count_profiles(&target);
-    attempts.push(attempt);
-    let roots = packages.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
-    let evidence = parse_scoped_direct_report(&path, &roots, &[])?;
-    let package_names = measured_package_names(packages, &evidence);
-    if package_names.is_empty() {
-        return None;
+    let primary_failed = primary.outcome != "success";
+    attempts.push(primary);
+    if let Some(evidence) = parse_direct_report(&primary_path) {
+        let evidence = persist_primary_report(output, &primary_path, evidence);
+        return Some(DirectRecovery {
+            evidence,
+            package_names: vec![],
+            profile_count: count_profiles(&target),
+            degraded: primary_failed,
+        });
     }
-    Some(DirectRecovery { evidence, package_names, profile_count, degraded })
+    clear_temporary_report(&primary_path);
+
+    let tolerant_path = fresh_primary_report_path(output, "tolerant");
+    let tolerant = run_attempt(
+        workspace,
+        &target,
+        &env,
+        AttemptSpec {
+            package: None,
+            target: None,
+            configuration: "direct-workspace-ignore-run-fail",
+            mode: TestMode::DirectReport,
+            args: tolerant_direct_report_args(&tolerant_path),
+        },
+    );
+    attempts.push(tolerant);
+    let evidence = parse_direct_report(&tolerant_path)?;
+    let evidence = persist_primary_report(output, &tolerant_path, evidence);
+    Some(DirectRecovery {
+        evidence,
+        package_names: vec![],
+        profile_count: count_profiles(&target),
+        degraded: true,
+    })
 }
 
 pub(super) fn recover_workspace_direct_report(
@@ -153,6 +180,48 @@ pub(super) fn recover_direct_reports(
     Some(DirectRecovery { evidence: merged, package_names, profile_count, degraded })
 }
 
+fn fresh_primary_report_path(output: &Path, label: &str) -> PathBuf {
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    output.join(format!(
+        ".llvm-cov-primary-{label}-{}-{stamp}.json",
+        std::process::id()
+    ))
+}
+
+fn persist_primary_report(
+    output: &Path,
+    temporary: &Path,
+    mut evidence: CoverageEvidence,
+) -> CoverageEvidence {
+    let canonical = output.join("llvm-cov.json");
+    match fs::copy(temporary, &canonical) {
+        Ok(_) => {
+            evidence.source = Some(canonical.display().to_string());
+            let _ = fs::remove_file(temporary);
+        }
+        Err(error) => {
+            evidence.status = EvidenceStatus::Partial;
+            evidence.error = Some(format!(
+                "coverage was collected, but the canonical report {} could not be updated: {error}; fresh evidence remains at {}",
+                canonical.display(),
+                temporary.display()
+            ));
+        }
+    }
+    evidence
+}
+
+fn parse_direct_report(path: &Path) -> Option<CoverageEvidence> {
+    if !path.exists() {
+        return None;
+    }
+    let evidence = parse::parse(path);
+    usable_coverage(&evidence).then_some(evidence)
+}
+
 fn parse_scoped_direct_report(
     path: &Path,
     covered_roots: &[String],
@@ -192,7 +261,7 @@ fn common_recovery_target(attempts: &[CoverageAttempt]) -> Option<Option<String>
     Some(targets.into_iter().next())
 }
 
-fn measured_package_names(
+pub(super) fn measured_package_names(
     packages: &[CoveragePackage],
     evidence: &CoverageEvidence,
 ) -> Vec<String> {

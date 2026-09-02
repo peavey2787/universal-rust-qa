@@ -112,11 +112,18 @@ fn diagnostics_distinguish_native_bindgen_target_test_and_build_failures() {
 fn primary_direct_collection_matches_plain_manual_json_contract() {
     let path = Path::new("qa-out/llvm-cov.json");
     let args = primary_direct_report_args(path);
+    assert_eq!(args, vec!["llvm-cov", "--json", "--output-path", "qa-out/llvm-cov.json"]);
+    assert!(!args.iter().any(|arg| arg == "-p" || arg == "--workspace"));
+    assert!(!args.iter().any(|arg| arg == "--ignore-run-fail"));
+}
+
+#[test]
+fn tolerant_direct_collection_only_adds_ignore_run_fail_to_manual_contract() {
+    let path = Path::new("qa-out/llvm-cov.json");
     assert_eq!(
-        args,
+        tolerant_direct_report_args(path),
         vec!["llvm-cov", "--ignore-run-fail", "--json", "--output-path", "qa-out/llvm-cov.json"]
     );
-    assert!(!args.iter().any(|arg| arg == "-p" || arg == "--workspace"));
 }
 
 #[test]
@@ -192,4 +199,38 @@ fn profile_count_uses_cargo_llvm_covs_top_level_raw_profile_contract() {
 fn environment_auto_provisions_llvm_tools_without_prompting() {
     let env = coverage_env(Path::new("isolated-target"));
     assert!(env.iter().any(|(key, value)| *key == "CARGO_LLVM_COV_SETUP" && value == "yes"));
+}
+
+#[test]
+fn primary_environment_does_not_override_cargo_llvm_cov_target_directories() {
+    let env = primary_coverage_env();
+    assert_eq!(env, vec![("CARGO_LLVM_COV_SETUP", "yes".into())]);
+}
+
+#[test]
+fn primary_output_setup_does_not_touch_existing_evidence_or_fallback_targets() {
+    let root = std::env::temp_dir().join(format!(
+        "urqa-primary-output-reset-{}-{}",
+        std::process::id(),
+        module_path!().replace("::", "-")
+    ));
+    match fs::remove_dir_all(&root) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("failed to reset primary output fixture: {error}"),
+    }
+    fs::create_dir_all(root.join("llvm-cov-target")).unwrap();
+    fs::create_dir_all(root.join("llvm-cov-rescue")).unwrap();
+    fs::write(root.join("llvm-cov-target/stale.profraw"), b"stale").unwrap();
+    fs::write(root.join("llvm-cov-rescue/stale.profraw"), b"stale").unwrap();
+    fs::write(root.join("llvm-cov.json"), b"stale").unwrap();
+    fs::write(root.join(MANIFEST_NAME), b"stale").unwrap();
+
+    prepare_primary_coverage_output(&root).unwrap();
+
+    assert!(root.join("llvm-cov.json").is_file());
+    assert!(root.join(MANIFEST_NAME).is_file());
+    assert!(root.join("llvm-cov-target/stale.profraw").is_file());
+    assert!(root.join("llvm-cov-rescue/stale.profraw").is_file());
+    fs::remove_dir_all(root).unwrap();
 }

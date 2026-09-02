@@ -99,11 +99,16 @@ pub(super) fn report_args(path: &Path, tolerant: bool) -> Vec<String> {
 pub(super) fn primary_direct_report_args(path: &Path) -> Vec<String> {
     vec![
         "llvm-cov".into(),
-        "--ignore-run-fail".into(),
         "--json".into(),
         "--output-path".into(),
         path.display().to_string(),
     ]
+}
+
+pub(super) fn tolerant_direct_report_args(path: &Path) -> Vec<String> {
+    let mut args = primary_direct_report_args(path);
+    args.insert(1, "--ignore-run-fail".into());
+    args
 }
 
 pub(super) fn workspace_direct_report_args(
@@ -111,7 +116,7 @@ pub(super) fn workspace_direct_report_args(
     target: Option<&str>,
     path: &Path,
 ) -> Vec<String> {
-    let mut args = primary_direct_report_args(path);
+    let mut args = tolerant_direct_report_args(path);
     for package in packages {
         args.extend(["-p".into(), package.name.clone()]);
     }
@@ -325,10 +330,14 @@ pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
     ]
 }
 
-pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> {
+pub(super) fn prepare_primary_coverage_output(output: &Path) -> Result<(), String> {
     fs::create_dir_all(output).map_err(|error| {
         format!("failed to create coverage output {}: {error}", output.display())
-    })?;
+    })
+}
+
+pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> {
+    prepare_primary_coverage_output(output)?;
     for name in ["llvm-cov.json", MANIFEST_NAME] {
         let path = output.join(name);
         if path.exists() {
