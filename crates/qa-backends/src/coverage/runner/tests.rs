@@ -11,10 +11,8 @@ static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
 fn temp_dir(name: &str) -> PathBuf {
     let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!(
-        "urqa-progressive-coverage-{name}-{}-{id}",
-        std::process::id()
-    ));
+    let path = std::env::temp_dir()
+        .join(format!("urqa-progressive-coverage-{name}-{}-{id}", std::process::id()));
     if path.exists() {
         fs::remove_dir_all(&path).unwrap();
     }
@@ -108,14 +106,7 @@ fn optional_all_features_failure_does_not_erase_successful_default_coverage() {
         profile_count: 6,
         attempts: vec![
             attempt(Some("node"), "default", "success", None, 0, 4),
-            attempt(
-                Some("node"),
-                "all-features",
-                "failed",
-                Some("build-or-instrumentation"),
-                4,
-                6,
-            ),
+            attempt(Some("node"), "all-features", "failed", Some("build-or-instrumentation"), 4, 6),
         ],
         ..CoverageManifest::default()
     };
@@ -219,22 +210,8 @@ fn successful_project_default_marks_only_metadata_default_members() {
 
 #[test]
 fn project_default_failure_states_distinguish_retryable_from_tooling() {
-    let test_failure = attempt(
-        None,
-        "project-default",
-        "failed",
-        Some("test-failure"),
-        0,
-        2,
-    );
-    let tooling_failure = attempt(
-        None,
-        "project-default",
-        "unavailable",
-        Some("tooling"),
-        0,
-        0,
-    );
+    let test_failure = attempt(None, "project-default", "failed", Some("test-failure"), 0, 2);
+    let tooling_failure = attempt(None, "project-default", "unavailable", Some("tooling"), 0, 0);
     assert_eq!(project_default_state(&test_failure), ProjectDefaultState::RetryableFailure);
     assert_eq!(project_default_state(&tooling_failure), ProjectDefaultState::ToolingFailure);
 }

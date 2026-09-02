@@ -53,12 +53,8 @@ pub(super) fn test_args(
     target: Option<&str>,
     mode: TestMode,
 ) -> Vec<String> {
-    let mut args = vec![
-        "llvm-cov".into(),
-        "--no-report".into(),
-        "--no-clean".into(),
-        "--no-fail-fast".into(),
-    ];
+    let mut args =
+        vec!["llvm-cov".into(), "--no-report".into(), "--no-clean".into(), "--no-fail-fast".into()];
     if let Some(package) = package {
         args.extend(["-p".into(), package.name.clone()]);
     } else {
@@ -98,16 +94,21 @@ pub(super) fn report_args(path: &Path, tolerant: bool) -> Vec<String> {
     args
 }
 
+pub(super) struct AttemptSpec<'a> {
+    pub package: Option<&'a str>,
+    pub target: Option<&'a str>,
+    pub configuration: &'a str,
+    pub mode: TestMode,
+    pub args: Vec<String>,
+}
+
 pub(super) fn run_attempt(
     workspace: &Path,
     target_dir: &Path,
     env: &[(&str, String)],
-    package: Option<&str>,
-    target: Option<&str>,
-    configuration: &str,
-    mode: TestMode,
-    args: Vec<String>,
+    spec: AttemptSpec<'_>,
 ) -> CoverageAttempt {
+    let AttemptSpec { package, target, configuration, mode, args } = spec;
     let before = count_profiles(target_dir);
     let result = crate::process::with_cargo_target_dir(None, || {
         crate::process::run(workspace, "cargo", &args, env)
@@ -138,11 +139,7 @@ pub(super) fn run_attempt(
     }
 }
 
-fn attempt_stage(
-    mode: TestMode,
-    outcome: AttemptOutcome,
-    category: Option<&str>,
-) -> &'static str {
+fn attempt_stage(mode: TestMode, outcome: AttemptOutcome, category: Option<&str>) -> &'static str {
     if mode == TestMode::Report {
         return "report";
     }
@@ -239,25 +236,15 @@ pub(super) fn classify_failure(diagnostic: &str) -> String {
     {
         return "profile-merge".into();
     }
-    let native_build = [
-        "libclang",
-        "clang-sys",
-        "linker",
-        "link.exe",
-        "cmake",
-        "librocksdb-sys",
-        "rocksdb-sys",
-    ]
-    .iter()
-    .any(|needle| text.contains(needle))
-        || (text.contains("bindgen") && text.contains("clang"));
+    let native_build =
+        ["libclang", "clang-sys", "linker", "link.exe", "cmake", "librocksdb-sys", "rocksdb-sys"]
+            .iter()
+            .any(|needle| text.contains(needle))
+            || (text.contains("bindgen") && text.contains("clang"));
     if native_build {
         return "environment-native-build".into();
     }
-    if ["test result: failed", "test failed"]
-        .iter()
-        .any(|needle| text.contains(needle))
-    {
+    if ["test result: failed", "test failed"].iter().any(|needle| text.contains(needle)) {
         return "test-failure".into();
     }
     "build-or-instrumentation".into()
@@ -274,29 +261,20 @@ pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
 
 pub(super) fn prepare_coverage_target(output: &Path) -> Result<PathBuf, String> {
     fs::create_dir_all(output).map_err(|error| {
-        format!(
-            "failed to create coverage output {}: {error}",
-            output.display()
-        )
+        format!("failed to create coverage output {}: {error}", output.display())
     })?;
     for name in ["llvm-cov.json", MANIFEST_NAME] {
         let path = output.join(name);
         if path.exists() {
             fs::remove_file(&path).map_err(|error| {
-                format!(
-                    "failed to reset coverage evidence {}: {error}",
-                    path.display()
-                )
+                format!("failed to reset coverage evidence {}: {error}", path.display())
             })?;
         }
     }
     let target = output.join("llvm-cov-target");
     if target.exists() {
         fs::remove_dir_all(&target).map_err(|error| {
-            format!(
-                "failed to reset coverage target {}: {error}",
-                target.display()
-            )
+            format!("failed to reset coverage target {}: {error}", target.display())
         })?;
     }
     Ok(target)
@@ -368,9 +346,10 @@ mod tests {
         assert!(args.windows(2).any(|pair| pair[0] == "-p" && pair[1] == "wallet"));
         assert!(args.windows(2).any(|pair| pair[0] == "--features" && pair[1] == "serde,rpc"));
         assert!(args.iter().any(|arg| arg == "--no-default-features"));
-        assert!(args.windows(2).any(|pair| {
-            pair[0] == "--target" && pair[1] == "wasm32-unknown-unknown"
-        }));
+        assert!(
+            args.windows(2)
+                .any(|pair| { pair[0] == "--target" && pair[1] == "wasm32-unknown-unknown" })
+        );
         assert!(args.iter().any(|arg| arg == "--coverage-target-only"));
     }
 
@@ -389,17 +368,10 @@ mod tests {
             "instrument-build"
         );
         assert_eq!(
-            attempt_stage(
-                TestMode::Default,
-                AttemptOutcome::Failed,
-                Some("unsupported-target")
-            ),
+            attempt_stage(TestMode::Default, AttemptOutcome::Failed, Some("unsupported-target")),
             "target-compatibility"
         );
-        assert_eq!(
-            attempt_stage(TestMode::Report, AttemptOutcome::Failed, None),
-            "report"
-        );
+        assert_eq!(attempt_stage(TestMode::Report, AttemptOutcome::Failed, None), "report");
     }
 
     #[test]
@@ -441,19 +413,13 @@ mod tests {
         assert!(!strict.iter().any(|arg| arg == "--failure-mode"));
 
         let tolerant = report_args(Path::new("qa-out/llvm-cov.json"), true);
-        assert!(
-            tolerant
-                .windows(2)
-                .any(|pair| pair[0] == "--failure-mode" && pair[1] == "all")
-        );
+        assert!(tolerant.windows(2).any(|pair| pair[0] == "--failure-mode" && pair[1] == "all"));
     }
 
     #[test]
     fn profile_count_uses_cargo_llvm_covs_top_level_raw_profile_contract() {
-        let root = std::env::temp_dir().join(format!(
-            "urqa-coverage-profile-count-{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir()
+            .join(format!("urqa-coverage-profile-count-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("debug")).unwrap();
         fs::write(root.join("one.profraw"), b"one").unwrap();

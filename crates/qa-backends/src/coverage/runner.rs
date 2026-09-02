@@ -1,11 +1,11 @@
 use super::{
+    CoverageEvidence,
     execute::{
-        count_profiles, coverage_env, optional_modes, prepare_coverage_target, run_attempt,
-        target_variants, test_args, TestMode,
+        AttemptSpec, TestMode, count_profiles, coverage_env, optional_modes, prepare_coverage_target,
+        run_attempt, target_variants, test_args,
     },
     manifest::not_applicable_evidence,
     plan::workspace_packages,
-    CoverageEvidence,
 };
 use qa_policy::QaConfig;
 use std::{collections::BTreeMap, path::Path};
@@ -13,7 +13,7 @@ use std::{collections::BTreeMap, path::Path};
 mod finalize;
 mod scope;
 
-use scope::{coverage_scope, CoverageScope};
+use scope::{CoverageScope, coverage_scope};
 
 #[derive(Debug, Default)]
 struct PackageState {
@@ -72,9 +72,8 @@ pub(super) fn collect_progressive(
     let scope = coverage_scope(&packages, &states, target_variants.len());
     if scope.eligible.is_empty() {
         let mut not_applicable_names = static_not_applicable;
-        not_applicable_names.extend(
-            scope.runtime_not_applicable.iter().map(|package| package.name.clone()),
-        );
+        not_applicable_names
+            .extend(scope.runtime_not_applicable.iter().map(|package| package.name.clone()));
         return not_applicable_evidence(
             output,
             workspace_count,
@@ -101,10 +100,7 @@ pub(super) fn collect_progressive(
 }
 
 fn initial_states(packages: &[super::model::CoveragePackage]) -> BTreeMap<String, PackageState> {
-    packages
-        .iter()
-        .map(|package| (package.name.clone(), PackageState::default()))
-        .collect()
+    packages.iter().map(|package| (package.name.clone(), PackageState::default())).collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -191,16 +187,7 @@ fn execute_baseline(
             ProjectDefaultState::Skipped => {}
         }
     }
-    run_baseline_scope(
-        workspace,
-        config,
-        packages,
-        target_triple,
-        target,
-        env,
-        attempts,
-        states,
-    )
+    run_baseline_scope(workspace, config, packages, target_triple, target, env, attempts, states)
 }
 
 fn run_project_default(
@@ -218,11 +205,13 @@ fn run_project_default(
         workspace,
         target,
         env,
-        None,
-        None,
-        "project-default",
-        TestMode::Default,
-        args,
+        AttemptSpec {
+            package: None,
+            target: None,
+            configuration: "project-default",
+            mode: TestMode::Default,
+            args,
+        },
     );
     let state = project_default_state(&attempt);
     attempts.push(attempt);
@@ -249,11 +238,8 @@ fn mark_default_success(
     packages: &[super::model::CoveragePackage],
     states: &mut BTreeMap<String, PackageState>,
 ) -> Vec<String> {
-    let defaults = packages
-        .iter()
-        .filter(|package| package.default_member)
-        .cloned()
-        .collect::<Vec<_>>();
+    let defaults =
+        packages.iter().filter(|package| package.default_member).cloned().collect::<Vec<_>>();
     mark_group_success(&defaults, states)
 }
 
@@ -272,11 +258,13 @@ fn run_baseline_scope(
         workspace,
         target,
         env,
-        None,
-        target_triple,
-        "eligible-package-group",
-        TestMode::Default,
-        test_args(&config.coverage, packages, None, target_triple, TestMode::Default),
+        AttemptSpec {
+            package: None,
+            target: target_triple,
+            configuration: "eligible-package-group",
+            mode: TestMode::Default,
+            args: test_args(&config.coverage, packages, None, target_triple, TestMode::Default),
+        },
     );
     let group_ok = group.outcome == "success";
     let retryable = group.category.as_deref() != Some("tooling");
@@ -287,16 +275,7 @@ fn run_baseline_scope(
     if !config.coverage.adaptive || !retryable {
         return vec![];
     }
-    retry_packages(
-        workspace,
-        config,
-        packages,
-        target_triple,
-        target,
-        env,
-        attempts,
-        states,
-    )
+    retry_packages(workspace, config, packages, target_triple, target, env, attempts, states)
 }
 
 fn mark_group_success(
@@ -331,17 +310,19 @@ fn retry_packages(
             workspace,
             target,
             env,
-            Some(&package.name),
-            target_triple,
-            "default-package-retry",
-            TestMode::Default,
-            test_args(
-                &config.coverage,
-                std::slice::from_ref(package),
-                Some(package),
-                target_triple,
-                TestMode::Default,
-            ),
+            AttemptSpec {
+                package: Some(&package.name),
+                target: target_triple,
+                configuration: "default-package-retry",
+                mode: TestMode::Default,
+                args: test_args(
+                    &config.coverage,
+                    std::slice::from_ref(package),
+                    Some(package),
+                    target_triple,
+                    TestMode::Default,
+                ),
+            },
         );
         if attempt.outcome == "success" {
             if let Some(state) = states.get_mut(&package.name) {
@@ -358,10 +339,7 @@ fn retry_packages(
     successful
 }
 
-fn host_incompatible(
-    attempt: &super::model::CoverageAttempt,
-    target_triple: Option<&str>,
-) -> bool {
+fn host_incompatible(attempt: &super::model::CoverageAttempt, target_triple: Option<&str>) -> bool {
     target_triple.is_none()
         && attempt.outcome != "success"
         && attempt.category.as_deref() == Some("unsupported-target")
@@ -389,17 +367,19 @@ fn run_optional_configurations(
                 workspace,
                 target,
                 env,
-                Some(&package.name),
-                target_triple,
-                mode.label(),
-                mode,
-                test_args(
-                    &config.coverage,
-                    std::slice::from_ref(package),
-                    Some(package),
-                    target_triple,
+                AttemptSpec {
+                    package: Some(&package.name),
+                    target: target_triple,
+                    configuration: mode.label(),
                     mode,
-                ),
+                    args: test_args(
+                        &config.coverage,
+                        std::slice::from_ref(package),
+                        Some(package),
+                        target_triple,
+                        mode,
+                    ),
+                },
             );
             if attempt.outcome != "success" {
                 if let Some(state) = states.get_mut(&package.name) {

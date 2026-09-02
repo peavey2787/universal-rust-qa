@@ -9,10 +9,8 @@ static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
 
 fn temp_dir(name: &str) -> PathBuf {
     let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
-    let path = std::env::temp_dir().join(format!(
-        "urqa-coverage-{name}-{}-{id}",
-        std::process::id()
-    ));
+    let path =
+        std::env::temp_dir().join(format!("urqa-coverage-{name}-{}-{id}", std::process::id()));
     if path.exists() {
         fs::remove_dir_all(&path).unwrap();
     }
@@ -131,11 +129,7 @@ fn old_partial_manifest_without_package_roots_withholds_per_function_coverage() 
         "profile_count":4,
         "attempts":[]
     });
-    fs::write(
-        out.join("coverage-failures.json"),
-        serde_json::to_vec(&manifest).unwrap(),
-    )
-    .unwrap();
+    fs::write(out.join("coverage-failures.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     let mut config = QaConfig::default();
     config.coverage.mode = "existing".into();
     let evidence = collect(&root, &config, &out, true);

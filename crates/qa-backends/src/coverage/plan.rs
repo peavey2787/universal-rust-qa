@@ -135,7 +135,7 @@ fn package_source_loc(root: &Path, member_roots: &[PathBuf]) -> Result<usize, St
             format!("failed to enumerate coverage source scope under {}: {error}", root.display())
         })?;
         if !entry.file_type().is_file()
-            || !entry.path().extension().is_some_and(|extension| extension == "rs")
+            || entry.path().extension().is_none_or(|extension| extension != "rs")
         {
             continue;
         }
@@ -180,10 +180,7 @@ mod tests {
 
     #[test]
     fn metadata_selection_honors_include_exclude_and_custom_build_only_members() {
-        let root = std::env::temp_dir().join(format!(
-            "urqa-coverage-plan-{}",
-            std::process::id()
-        ));
+        let root = std::env::temp_dir().join(format!("urqa-coverage-plan-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         for name in ["a", "b", "build"] {
             fs::create_dir_all(root.join(name).join("src")).unwrap();
@@ -207,10 +204,7 @@ mod tests {
         let (workspace_count, packages, not_applicable) =
             packages_from_metadata(&root, &config, &value).unwrap();
         assert_eq!(workspace_count, 3);
-        assert_eq!(
-            packages.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(),
-            ["a"]
-        );
+        assert_eq!(packages.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(), ["a"]);
         assert!(packages[0].default_member);
         assert_eq!(packages[0].source_loc, 1);
         assert_eq!(not_applicable, vec!["build"]);

@@ -103,11 +103,7 @@ fn summary_dashboard_text(
         4,
         "Tests",
         format!("{:>5} total", summary.total_tests),
-        format!(
-            "{} flagged | coverage {}",
-            summary.invalid_tests,
-            coverage_label(summary)
-        ),
+        format!("{} flagged | coverage {}", summary.invalid_tests, coverage_label(summary)),
     ));
     output.push_str(&row_text(
         5,

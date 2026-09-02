@@ -16,7 +16,8 @@ pub(super) fn parse(path: &Path) -> CoverageEvidence {
 }
 
 pub(super) fn parse_value(path: &Path, value: &Value) -> CoverageEvidence {
-    let Some(percent) = value.pointer("/data/0/totals/lines/percent").and_then(Value::as_f64) else {
+    let Some(percent) = value.pointer("/data/0/totals/lines/percent").and_then(Value::as_f64)
+    else {
         return failed("coverage JSON omitted data[0].totals.lines.percent".into());
     };
     let mut files = BTreeMap::new();
@@ -142,10 +143,7 @@ mod tests {
         let evidence = parse_value(Path::new("partial.json"), &value);
         assert_eq!(evidence.status, EvidenceStatus::Failed);
         assert!(
-            evidence
-                .error
-                .as_deref()
-                .is_some_and(|error| error.contains("totals.lines.percent"))
+            evidence.error.as_deref().is_some_and(|error| error.contains("totals.lines.percent"))
         );
     }
 
@@ -215,11 +213,7 @@ mod tests {
             }]
         });
         let mut evidence = parse_value(Path::new("merged.json"), &value);
-        retain_package_scope(
-            &mut evidence,
-            &["/ws".into()],
-            &["/ws/crates/failed".into()],
-        );
+        retain_package_scope(&mut evidence, &["/ws".into()], &["/ws/crates/failed".into()]);
         assert!(evidence.files.contains_key("/ws/src/lib.rs"));
         assert!(!evidence.files.contains_key("/ws/crates/failed/src/lib.rs"));
     }

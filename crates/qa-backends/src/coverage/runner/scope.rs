@@ -1,5 +1,5 @@
-use super::PackageState;
 use super::super::model::CoveragePackage;
+use super::PackageState;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
@@ -18,52 +18,34 @@ pub(super) fn coverage_scope(
 ) -> CoverageScope {
     let runtime_not_applicable = packages
         .iter()
-        .filter(|package| {
-            states
-                .get(&package.name)
-                .is_some_and(|state| state.host_not_applicable)
-        })
+        .filter(|package| states.get(&package.name).is_some_and(|state| state.host_not_applicable))
         .cloned()
         .collect::<Vec<_>>();
     let eligible = packages
         .iter()
         .filter(|package| {
-            !runtime_not_applicable
-                .iter()
-                .any(|candidate| candidate.name == package.name)
+            !runtime_not_applicable.iter().any(|candidate| candidate.name == package.name)
         })
         .cloned()
         .collect::<Vec<_>>();
     let covered = eligible
         .iter()
         .filter(|package| {
-            states
-                .get(&package.name)
-                .is_some_and(|state| state.baseline_successes > 0)
+            states.get(&package.name).is_some_and(|state| state.baseline_successes > 0)
         })
         .cloned()
         .collect::<Vec<_>>();
     let failed_names = eligible
         .iter()
         .filter(|package| {
-            states
-                .get(&package.name)
-                .is_none_or(|state| state.baseline_successes == 0)
+            states.get(&package.name).is_none_or(|state| state.baseline_successes == 0)
         })
         .map(|package| package.name.clone())
         .collect();
     let incomplete_baseline = eligible.iter().any(|package| {
-        states
-            .get(&package.name)
-            .is_none_or(|state| state.baseline_successes < required_baselines)
+        states.get(&package.name).is_none_or(|state| state.baseline_successes < required_baselines)
     });
-    CoverageScope {
-        eligible,
-        covered,
-        failed_names,
-        runtime_not_applicable,
-        incomplete_baseline,
-    }
+    CoverageScope { eligible, covered, failed_names, runtime_not_applicable, incomplete_baseline }
 }
 
 #[cfg(test)]

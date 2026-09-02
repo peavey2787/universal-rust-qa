@@ -1,13 +1,13 @@
-use super::CoverageScope;
 use super::super::{
-    execute::{count_profiles, report_args, run_attempt, TestMode},
+    CoverageEvidence,
+    execute::{AttemptSpec, TestMode, count_profiles, report_args, run_attempt},
     manifest::{
         failed_report_detail, metadata_failure, partial_detail, scope_percent, write_manifest,
     },
     model::{CoverageAttempt, CoverageManifest},
     parse,
-    CoverageEvidence,
 };
+use super::CoverageScope;
 use qa_model::EvidenceStatus;
 use std::{
     fs,
@@ -32,11 +32,13 @@ pub(super) fn finalize_progressive(
         workspace,
         &target,
         &env,
-        None,
-        None,
-        "merged-report-strict",
-        TestMode::Report,
-        report_args(&report_path, false),
+        AttemptSpec {
+            package: None,
+            target: None,
+            configuration: "merged-report-strict",
+            mode: TestMode::Report,
+            args: report_args(&report_path, false),
+        },
     );
     let strict_ok = strict_report.outcome == "success";
     let mut report_ok = strict_ok;
@@ -47,11 +49,13 @@ pub(super) fn finalize_progressive(
             workspace,
             &target,
             &env,
-            None,
-            None,
-            "merged-report-tolerant",
-            TestMode::Report,
-            report_args(&report_path, true),
+            AttemptSpec {
+                package: None,
+                target: None,
+                configuration: "merged-report-tolerant",
+                mode: TestMode::Report,
+                args: report_args(&report_path, true),
+            },
         );
         report_ok = tolerant_report.outcome == "success";
         degraded = true;
@@ -60,11 +64,8 @@ pub(super) fn finalize_progressive(
         degraded |= !strict_ok;
     }
 
-    let covered_roots = scope
-        .covered
-        .iter()
-        .map(|package| package.root.clone())
-        .collect::<Vec<_>>();
+    let covered_roots =
+        scope.covered.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
     let excluded_roots = scope
         .eligible
         .iter()
@@ -72,21 +73,14 @@ pub(super) fn finalize_progressive(
         .chain(scope.runtime_not_applicable.iter())
         .map(|package| package.root.clone())
         .collect::<Vec<_>>();
-    let parsed = report_ok
-        .then(|| parse_report(&report_path, &covered_roots, &excluded_roots))
-        .flatten();
+    let parsed =
+        report_ok.then(|| parse_report(&report_path, &covered_roots, &excluded_roots)).flatten();
     let eligible_source_loc = scope.eligible.iter().map(|package| package.source_loc).sum();
     let covered_source_loc = scope.covered.iter().map(|package| package.source_loc).sum();
-    let eligible_package_names = scope
-        .eligible
-        .iter()
-        .map(|package| package.name.clone())
-        .collect::<Vec<_>>();
-    let covered_package_names = scope
-        .covered
-        .iter()
-        .map(|package| package.name.clone())
-        .collect::<Vec<_>>();
+    let eligible_package_names =
+        scope.eligible.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+    let covered_package_names =
+        scope.covered.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
     let not_applicable_package_names = static_not_applicable
         .iter()
         .cloned()
@@ -138,13 +132,12 @@ pub(super) fn finish_collection(
     mut manifest: CoverageManifest,
     degraded: bool,
 ) -> CoverageEvidence {
-    manifest.status = if parsed.as_ref().is_some_and(|evidence| {
-        evidence.status == EvidenceStatus::Available
-    }) {
-        if degraded { "partial".into() } else { "complete".into() }
-    } else {
-        "failed".into()
-    };
+    manifest.status =
+        if parsed.as_ref().is_some_and(|evidence| evidence.status == EvidenceStatus::Available) {
+            if degraded { "partial".into() } else { "complete".into() }
+        } else {
+            "failed".into()
+        };
     let manifest_path = write_manifest(output, &manifest).ok();
     let Some(mut evidence) = parsed else {
         return failed_from_manifest(manifest, manifest_path);
@@ -202,11 +195,8 @@ fn apply_manifest_fields(
 }
 
 pub(super) fn metadata_error(output: &Path, error: String) -> CoverageEvidence {
-    let mut manifest = CoverageManifest {
-        schema: 1,
-        status: "failed".into(),
-        ..CoverageManifest::default()
-    };
+    let mut manifest =
+        CoverageManifest { schema: 1, status: "failed".into(), ..CoverageManifest::default() };
     manifest.attempts.push(metadata_failure(error.clone()));
     let manifest_path = write_manifest(output, &manifest).ok();
     CoverageEvidence {

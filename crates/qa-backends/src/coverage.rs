@@ -34,7 +34,10 @@ pub fn collect(
     force: bool,
 ) -> CoverageEvidence {
     if config.coverage.mode == "off" {
-        return CoverageEvidence { status: EvidenceStatus::Disabled, ..CoverageEvidence::default() };
+        return CoverageEvidence {
+            status: EvidenceStatus::Disabled,
+            ..CoverageEvidence::default()
+        };
     }
     if force && config.coverage.mode != "existing" {
         return runner::collect_progressive(workspace, config, output);

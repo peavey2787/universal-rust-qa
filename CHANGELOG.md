@@ -1,3 +1,10 @@
+## 2026-09-01 - r56 progressive coverage Windows prerequisite repair
+
+- Applied the exact stable Rust 1.98 `rustfmt` layout reported by the r55 Windows full-test run across the progressive coverage modules and dashboard.
+- Removed the new coverage runner's Clippy `too_many_arguments` finding without suppressing warnings by introducing an `AttemptSpec` value that carries package, target, configuration, mode, and Cargo arguments into `run_attempt`. Existing callers now pass the explicit attempt specification while process/workspace/environment remain runner context.
+- Rewrote Rust-source extension filtering with the equivalent `Option::is_none_or` predicate required by Clippy's `nonminimal_bool` lint. No coverage semantics, strict thresholds, package semantic versions, GPL-v2-only licensing, or Clippy `-D warnings` policy changed.
+- The r55 Windows evidence had already passed `cargo check`, the full `cargo test` workspace suite, doctests, and `cargo qa doctor`; self-hardening was skipped only because prerequisite `cargo fmt --check` and Clippy failed.
+
 ## 2026-09-01 - r55 progressive evidence-preserving coverage
 
 - Replaced the all-or-nothing workspace coverage command with a progressive plan: run the project's normal/default coverage first, enumerate Cargo workspace/default members, cover members not already exercised in compatible package groups, and adaptively isolate failures while retaining every raw LLVM profile from successful or partially executed tests. A failed project-default attempt goes directly to narrower per-package retries instead of rerunning an equivalent whole workspace. `--all-features` is no longer the default requirement; it is an additional opt-in package-scoped configuration.

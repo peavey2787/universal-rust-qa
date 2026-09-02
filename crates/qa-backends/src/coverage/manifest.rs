@@ -1,6 +1,6 @@
 use super::{
-    model::{CoverageAttempt, CoverageManifest},
     CoverageEvidence,
+    model::{CoverageAttempt, CoverageManifest},
 };
 use qa_model::EvidenceStatus;
 use std::{fs, path::Path};
@@ -12,10 +12,7 @@ pub(super) fn write_manifest(output: &Path, manifest: &CoverageManifest) -> Resu
     let bytes = serde_json::to_vec_pretty(manifest)
         .map_err(|error| format!("failed to serialize coverage failure manifest: {error}"))?;
     fs::write(&path, bytes).map_err(|error| {
-        format!(
-            "failed to write coverage failure manifest {}: {error}",
-            path.display()
-        )
+        format!("failed to write coverage failure manifest {}: {error}", path.display())
     })?;
     Ok(path.display().to_string())
 }
@@ -80,11 +77,8 @@ pub(super) fn scope_percent(covered: usize, eligible: usize) -> Option<f64> {
 }
 
 pub(super) fn partial_detail(manifest: &CoverageManifest) -> String {
-    let failed_attempts = manifest
-        .attempts
-        .iter()
-        .filter(|attempt| attempt.outcome != "success")
-        .count();
+    let failed_attempts =
+        manifest.attempts.iter().filter(|attempt| attempt.outcome != "success").count();
     let failed_packages = package_list(&manifest.failed_package_names);
     let failure = first_failure_detail(&manifest.attempts);
     format!(
@@ -147,17 +141,9 @@ fn first_diagnostic_line(diagnostic: &str) -> String {
 
 fn diagnostic_signal(line: &str) -> bool {
     let line = line.to_ascii_lowercase();
-    [
-        "error",
-        "failed",
-        "cannot",
-        "could not",
-        "not found",
-        "unsupported",
-        "panicked",
-    ]
-    .iter()
-    .any(|signal| line.contains(signal))
+    ["error", "failed", "cannot", "could not", "not found", "unsupported", "panicked"]
+        .iter()
+        .any(|signal| line.contains(signal))
 }
 
 pub(super) fn failed_report_detail(profile_count: usize, manifest: &CoverageManifest) -> String {
