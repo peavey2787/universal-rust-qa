@@ -93,10 +93,7 @@ mod tests {
 
     #[test]
     fn stable_install_command_matches_upstream_installation_contract() {
-        assert_eq!(
-            stable_install_args(),
-            vec!["+stable", "install", "--locked", "cargo-llvm-cov"]
-        );
+        assert_eq!(stable_install_args(), vec!["+stable", "install", "--locked", "cargo-llvm-cov"]);
     }
 
     #[test]

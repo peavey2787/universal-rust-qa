@@ -1,3 +1,8 @@
+## 2026-09-02 - r63 r62 rustfmt repair
+
+- Applied the exact stable Rust formatting reported by the Windows `cargo fmt --check` run to the `stable_install_command_matches_upstream_installation_contract` assertion in `coverage/tooling.rs`.
+- No coverage behavior, direct-primary architecture, Kaspa workspace handling, automatic `cargo-llvm-cov` provisioning, package semantic version, strict threshold, GPL-v2-only licensing, mutation policy, or Clippy `-D warnings` policy changed.
+
 ## 2026-09-02 - r62 restore direct coverage as the primary path
 
 - Restored the simple coverage architecture that worked before the r55 progressive rewrite: ordinary implicit-host/default-feature coverage now probes or installs `cargo-llvm-cov`, runs one isolated selected-workspace `cargo llvm-cov --json --output-path ... --ignore-run-fail` command first, parses that JSON directly, and returns immediately when every selected package is measured. The progressive raw-profile/merge/package-isolation machinery is fallback-only instead of being able to break normal self-hardening or external-project coverage before the direct command is tried.
