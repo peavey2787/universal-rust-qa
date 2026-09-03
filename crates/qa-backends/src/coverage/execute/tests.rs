@@ -84,6 +84,16 @@ fn diagnostics_distinguish_native_bindgen_target_test_and_build_failures() {
         "environment-native-build"
     );
     assert_eq!(
+        classify_failure(
+            "failed to build archive: There is not enough space on the disk. (os error 112)"
+        ),
+        "resource-exhaustion"
+    );
+    assert_eq!(
+        classify_failure("rustc-LLVM ERROR: IO failure on output stream: no space on device"),
+        "resource-exhaustion"
+    );
+    assert_eq!(
         classify_failure("can't find crate for `std`; target may not be installed wasm32"),
         "unsupported-target"
     );
@@ -222,9 +232,10 @@ fn profile_count_uses_cargo_llvm_covs_top_level_raw_profile_contract() {
 }
 
 #[test]
-fn environment_auto_provisions_llvm_tools_without_prompting() {
+fn environment_auto_provisions_llvm_tools_without_prompting_and_bounds_scratch_growth() {
     let env = coverage_env(Path::new("isolated-target"));
     assert!(env.iter().any(|(key, value)| *key == "CARGO_LLVM_COV_SETUP" && value == "yes"));
+    assert!(env.iter().any(|(key, value)| *key == "CARGO_INCREMENTAL" && value == "0"));
 }
 
 #[test]

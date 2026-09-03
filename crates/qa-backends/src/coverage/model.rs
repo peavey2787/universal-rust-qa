@@ -68,5 +68,6 @@ impl AttemptOutcome {
 pub(super) struct AttemptResult {
     pub outcome: AttemptOutcome,
     pub exit_code: Option<i32>,
+    pub category: Option<String>,
     pub diagnostic: Option<String>,
 }

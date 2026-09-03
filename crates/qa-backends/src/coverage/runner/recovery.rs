@@ -162,6 +162,8 @@ pub(super) fn recover_workspace_direct_report(
     Some(DirectRecovery { evidence, package_names, profile_count, degraded })
 }
 
+const MAX_PACKAGES_PER_RECOVERY_TARGET: usize = 8;
+
 pub(super) fn recover_direct_reports(
     workspace: &Path,
     output: &Path,
@@ -172,10 +174,15 @@ pub(super) fn recover_direct_reports(
     let mut merged =
         CoverageEvidence { status: EvidenceStatus::Available, ..CoverageEvidence::default() };
     let mut package_names = Vec::new();
-    let rescue_target = fresh_primary_target_path(output);
-    let rescue_env = super::super::execute::coverage_env(&rescue_target);
+    let mut rescue_generation = 0;
+    let mut rescue_target = fresh_recovery_target_path(output, rescue_generation);
+    cleanup_primary_target(&rescue_target);
+    let mut rescue_env = super::super::execute::coverage_env(&rescue_target);
     let clean_clang_first = attempts.iter().any(needs_clean_clang_retry);
     let mut degraded = false;
+    let mut completed_profile_count = 0;
+    let mut packages_in_target = 0;
+
     for (index, package) in candidates.iter().enumerate() {
         let path = output.join(format!("llvm-cov-rescue-{index}.json"));
         if !clear_temporary_report(&path) {
@@ -183,49 +190,41 @@ pub(super) fn recover_direct_reports(
             continue;
         }
         let target_triple = recovery_target(attempts, &package.name);
-        let spec = AttemptSpec {
-            package: Some(&package.name),
-            target: target_triple.as_deref(),
-            configuration: if clean_clang_first {
-                "direct-report-recovery-clean-clang"
-            } else {
-                "direct-report-recovery"
-            },
-            mode: TestMode::DirectReport,
-            args: direct_report_args(package, target_triple.as_deref(), &path),
-        };
-        let attempt = if clean_clang_first {
-            run_attempt_with_env_removals(
-                workspace,
-                &rescue_target,
-                &rescue_env,
-                CLANG_OVERRIDE_ENV,
-                spec,
-            )
-        } else {
-            run_attempt(workspace, &rescue_target, &rescue_env, spec)
-        };
-        let clean_clang_retry = !clean_clang_first && needs_clean_clang_retry(&attempt);
-        degraded |= attempt.outcome != "success";
-        attempts.push(attempt);
-        if clean_clang_retry && parse_direct_report(&path).is_none() {
-            clear_temporary_report(&path);
-            let retry = run_attempt_with_env_removals(
-                workspace,
-                &rescue_target,
-                &rescue_env,
-                CLANG_OVERRIDE_ENV,
-                AttemptSpec {
-                    package: Some(&package.name),
-                    target: target_triple.as_deref(),
-                    configuration: "direct-report-recovery-clean-clang",
-                    mode: TestMode::DirectReport,
-                    args: direct_report_args(package, target_triple.as_deref(), &path),
-                },
+        let mut run = run_package_direct_recovery(
+            workspace,
+            &rescue_target,
+            &rescue_env,
+            package,
+            target_triple.as_deref(),
+            &path,
+            clean_clang_first,
+            attempts,
+        );
+        degraded |= run.degraded;
+
+        if run.storage_exhausted && parse_direct_report(&path).is_none() {
+            recycle_recovery_target(
+                output,
+                &mut rescue_generation,
+                &mut rescue_target,
+                &mut rescue_env,
+                &mut completed_profile_count,
             );
-            degraded |= retry.outcome != "success";
-            attempts.push(retry);
+            packages_in_target = 0;
+            clear_temporary_report(&path);
+            run = run_package_direct_recovery(
+                workspace,
+                &rescue_target,
+                &rescue_env,
+                package,
+                target_triple.as_deref(),
+                &path,
+                clean_clang_first,
+                attempts,
+            );
+            degraded |= run.degraded;
         }
+
         let excluded = scope
             .eligible
             .iter()
@@ -240,14 +239,124 @@ pub(super) fn recover_direct_reports(
             package_names.push(package.name.clone());
         }
         clear_temporary_report(&path);
+        packages_in_target += 1;
+
+        if should_recycle_recovery_target(packages_in_target, run.storage_exhausted) {
+            recycle_recovery_target(
+                output,
+                &mut rescue_generation,
+                &mut rescue_target,
+                &mut rescue_env,
+                &mut completed_profile_count,
+            );
+            packages_in_target = 0;
+        }
     }
-    let profile_count = count_profiles(&rescue_target);
+
+    let profile_count = completed_profile_count + count_profiles(&rescue_target);
     cleanup_primary_target(&rescue_target);
     if package_names.is_empty() || merged.files.is_empty() {
         return None;
     }
     persist_merged_evidence(output, &mut merged);
     Some(DirectRecovery { evidence: merged, package_names, profile_count, degraded })
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PackageRecoveryRun {
+    degraded: bool,
+    storage_exhausted: bool,
+}
+
+fn run_package_direct_recovery(
+    workspace: &Path,
+    rescue_target: &Path,
+    rescue_env: &[(&str, String)],
+    package: &CoveragePackage,
+    target_triple: Option<&str>,
+    path: &Path,
+    clean_clang_first: bool,
+    attempts: &mut Vec<CoverageAttempt>,
+) -> PackageRecoveryRun {
+    let spec = AttemptSpec {
+        package: Some(&package.name),
+        target: target_triple,
+        configuration: if clean_clang_first {
+            "direct-report-recovery-clean-clang"
+        } else {
+            "direct-report-recovery"
+        },
+        mode: TestMode::DirectReport,
+        args: direct_report_args(package, target_triple, path),
+    };
+    let attempt = if clean_clang_first {
+        run_attempt_with_env_removals(
+            workspace,
+            rescue_target,
+            rescue_env,
+            CLANG_OVERRIDE_ENV,
+            spec,
+        )
+    } else {
+        run_attempt(workspace, rescue_target, rescue_env, spec)
+    };
+    let clean_clang_retry = !clean_clang_first && needs_clean_clang_retry(&attempt);
+    let mut run = PackageRecoveryRun {
+        degraded: attempt.outcome != "success",
+        storage_exhausted: resource_exhausted(&attempt),
+    };
+    attempts.push(attempt);
+
+    if clean_clang_retry && parse_direct_report(path).is_none() {
+        clear_temporary_report(path);
+        let retry = run_attempt_with_env_removals(
+            workspace,
+            rescue_target,
+            rescue_env,
+            CLANG_OVERRIDE_ENV,
+            AttemptSpec {
+                package: Some(&package.name),
+                target: target_triple,
+                configuration: "direct-report-recovery-clean-clang",
+                mode: TestMode::DirectReport,
+                args: direct_report_args(package, target_triple, path),
+            },
+        );
+        run.degraded |= retry.outcome != "success";
+        run.storage_exhausted = resource_exhausted(&retry);
+        attempts.push(retry);
+    }
+    run
+}
+
+fn resource_exhausted(attempt: &CoverageAttempt) -> bool {
+    attempt.category.as_deref() == Some("resource-exhaustion")
+}
+
+fn should_recycle_recovery_target(packages_in_target: usize, storage_exhausted: bool) -> bool {
+    storage_exhausted || packages_in_target >= MAX_PACKAGES_PER_RECOVERY_TARGET
+}
+
+fn recycle_recovery_target(
+    output: &Path,
+    generation: &mut usize,
+    target: &mut PathBuf,
+    env: &mut Vec<(&'static str, String)>,
+    profile_count: &mut usize,
+) {
+    *profile_count += count_profiles(target);
+    cleanup_primary_target(target);
+    *generation += 1;
+    *target = fresh_recovery_target_path(output, *generation);
+    cleanup_primary_target(target);
+    *env = super::super::execute::coverage_env(target);
+}
+
+fn fresh_recovery_target_path(output: &Path, generation: usize) -> PathBuf {
+    output.join(format!(
+        ".cov-target-{}-rescue-{generation}",
+        std::process::id()
+    ))
 }
 
 pub(super) fn persist_merged_evidence(output: &Path, evidence: &mut CoverageEvidence) {
@@ -527,5 +636,52 @@ mod tests {
     fn workspace_direct_recovery_is_skipped_for_multiple_explicit_targets() {
         let attempts = vec![attempt_with_target("a"), attempt_with_target("b")];
         assert_eq!(common_recovery_target(&attempts), None);
+    }
+
+    #[test]
+    fn recovery_target_batch_is_bounded_before_disk_exhaustion() {
+        assert!(!should_recycle_recovery_target(MAX_PACKAGES_PER_RECOVERY_TARGET - 1, false));
+        assert!(should_recycle_recovery_target(MAX_PACKAGES_PER_RECOVERY_TARGET, false));
+        assert!(should_recycle_recovery_target(1, true));
+    }
+
+    #[test]
+    fn recovery_target_recycle_preserves_profile_count_and_moves_to_fresh_scratch() {
+        let root = std::env::temp_dir().join(format!(
+            "urqa-recovery-recycle-{}-{}",
+            std::process::id(),
+            module_path!().replace("::", "-")
+        ));
+        match fs::remove_dir_all(&root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => panic!("failed to reset recovery recycle fixture: {error}"),
+        }
+        fs::create_dir_all(&root).unwrap();
+
+        let mut generation = 0;
+        let mut target = fresh_recovery_target_path(&root, generation);
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("one.profraw"), b"profile").unwrap();
+        let mut env = super::super::super::execute::coverage_env(&target);
+        let mut profile_count = 0;
+        let old_target = target.clone();
+
+        recycle_recovery_target(
+            &root,
+            &mut generation,
+            &mut target,
+            &mut env,
+            &mut profile_count,
+        );
+
+        assert_eq!(profile_count, 1);
+        assert_eq!(generation, 1);
+        assert!(!old_target.exists());
+        assert_ne!(target, old_target);
+        assert!(env.iter().any(|(key, value)| {
+            *key == "CARGO_LLVM_COV_TARGET_DIR" && value == &target.display().to_string()
+        }));
+        fs::remove_dir_all(root).unwrap();
     }
 }

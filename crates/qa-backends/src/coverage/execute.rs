@@ -183,12 +183,7 @@ pub(super) fn run_attempt_with_env_removals(
     });
     let after = count_profiles(target_dir);
     let result = classify_result(result);
-    let category = if result.outcome == AttemptOutcome::Unavailable {
-        Some("tooling".into())
-    } else {
-        result.diagnostic.as_deref().map(classify_failure)
-    };
-    let stage = attempt_stage(mode, result.outcome, category.as_deref());
+    let stage = attempt_stage(mode, result.outcome, result.category.as_deref());
     CoverageAttempt {
         package: package.map(str::to_string),
         target: target.map(str::to_string),
@@ -200,7 +195,7 @@ pub(super) fn run_attempt_with_env_removals(
         exit_code: result.exit_code,
         stage: stage.into(),
         outcome: result.outcome.label().into(),
-        category,
+        category: result.category,
         profiles_before: before,
         profiles_after: after,
         diagnostic: result.diagnostic,
@@ -239,11 +234,13 @@ fn classify_result(result: std::io::Result<std::process::Output>) -> AttemptResu
         Ok(output) if output.status.success() => AttemptResult {
             outcome: AttemptOutcome::Success,
             exit_code: output.status.code(),
+            category: None,
             diagnostic: None,
         },
         Ok(output) => {
+            let category = classify_output_failure(&output);
+            let unavailable = category == "tooling";
             let diagnostic = crate::process::diagnostics(&output.stdout, &output.stderr);
-            let unavailable = classify_failure(&diagnostic) == "tooling";
             AttemptResult {
                 outcome: if unavailable {
                     AttemptOutcome::Unavailable
@@ -251,21 +248,35 @@ fn classify_result(result: std::io::Result<std::process::Output>) -> AttemptResu
                     AttemptOutcome::Failed
                 },
                 exit_code: output.status.code(),
+                category: Some(category),
                 diagnostic: Some(diagnostic),
             }
         }
         Err(error) => AttemptResult {
             outcome: AttemptOutcome::Unavailable,
             exit_code: None,
+            category: Some("tooling".into()),
             diagnostic: Some(error.to_string()),
         },
     }
+}
+
+fn classify_output_failure(output: &std::process::Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut diagnostic = String::with_capacity(stdout.len() + stderr.len() + 1);
+    diagnostic.push_str(&stdout);
+    diagnostic.push('\n');
+    diagnostic.push_str(&stderr);
+    classify_failure(&diagnostic)
 }
 
 pub(super) fn classify_failure(diagnostic: &str) -> String {
     let text = diagnostic.to_ascii_lowercase();
     if tooling_failure(&text) {
         "tooling".into()
+    } else if storage_exhaustion_failure(&text) {
+        "resource-exhaustion".into()
     } else if unsupported_target_failure(&text) {
         "unsupported-target".into()
     } else if profile_merge_failure(&text) {
@@ -294,6 +305,20 @@ fn tooling_failure(text: &str) -> bool {
         && ["not found", "missing", "unavailable", "no such command"]
             .iter()
             .any(|needle| text.contains(needle))
+}
+
+fn storage_exhaustion_failure(text: &str) -> bool {
+    [
+        "no space left on device",
+        "no space on device",
+        "there is not enough space on the disk",
+        "database or disk is full",
+        "disk is full",
+        "os error 112",
+        "os error 28",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
 }
 
 fn unsupported_target_failure(text: &str) -> bool {
@@ -347,6 +372,7 @@ pub(super) fn coverage_env(target: &Path) -> Vec<(&'static str, String)> {
         ("CARGO_LLVM_COV_TARGET_DIR", target.clone()),
         ("CARGO_LLVM_COV_BUILD_DIR", target),
         ("CARGO_LLVM_COV_SETUP", "yes".into()),
+        ("CARGO_INCREMENTAL", "0".into()),
     ]
 }
 

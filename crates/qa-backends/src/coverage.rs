@@ -114,7 +114,7 @@ pub fn detail(evidence: &CoverageEvidence) -> String {
                 .unwrap_or_else(|| "unknown".into());
             let packages = if evidence.eligible_packages > 0 {
                 format!(
-                    "{}/{} eligible packages",
+                    "{}/{} eligible packages measured",
                     evidence.covered_packages, evidence.eligible_packages
                 )
             } else {
