@@ -229,6 +229,22 @@ fn rustflag_conflict_cleanup_removes_only_the_competing_encoding() {
 }
 
 #[test]
+fn explicit_environment_removals_override_ambient_values() {
+    let mut command = Command::new("rustc");
+    command.env("LIBCLANG_PATH", "ambient-clang");
+    command.env("KEEP_ME", "yes");
+    remove_envs_from_command(&mut command, &["LIBCLANG_PATH"]);
+    let envs = command.get_envs().collect::<Vec<_>>();
+    assert!(envs.iter().any(|(key, value)| {
+        *key == std::ffi::OsStr::new("LIBCLANG_PATH") && value.is_none()
+    }));
+    assert!(envs.iter().any(|(key, value)| {
+        *key == std::ffi::OsStr::new("KEEP_ME")
+            && *value == Some(std::ffi::OsStr::new("yes"))
+    }));
+}
+
+#[test]
 fn diagnostic_stream_preserves_exact_boundary_and_truncates_one_character_over() {
     let boundary = "a".repeat(3000);
     assert_eq!(diagnostic_stream(boundary.as_bytes()), boundary);

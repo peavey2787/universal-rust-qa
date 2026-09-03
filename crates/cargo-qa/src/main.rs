@@ -8,7 +8,7 @@ mod live_ui;
 mod paths;
 mod settings;
 
-pub(crate) const BUILD_REVISION: &str = "r72";
+pub(crate) const BUILD_REVISION: &str = "r73";
 
 #[cfg(test)]
 use commands::full_options;

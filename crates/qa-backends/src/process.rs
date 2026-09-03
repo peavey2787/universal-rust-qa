@@ -45,9 +45,20 @@ pub fn run(
     args: &[String],
     envs: &[(&str, String)],
 ) -> io::Result<Output> {
+    run_with_env_removals(workspace, program, args, envs, &[])
+}
+
+pub fn run_with_env_removals(
+    workspace: &Path,
+    program: &str,
+    args: &[String],
+    envs: &[(&str, String)],
+    remove_envs: &[&str],
+) -> io::Result<Output> {
     let mut command = workspace_program_command(workspace, program, args)?;
     apply_runtime_env(&mut command);
     clear_conflicting_rustflags(&mut command, envs);
+    remove_envs_from_command(&mut command, remove_envs);
     apply_envs(&mut command, envs);
     execute(command, &command_label(program, args), None)
 }
@@ -89,6 +100,12 @@ fn clear_conflicting_rustflags(command: &mut Command, envs: &[(&str, String)]) {
     }
     if envs.iter().any(|(key, _)| *key == "RUSTFLAGS") {
         command.env_remove("CARGO_ENCODED_RUSTFLAGS");
+    }
+}
+
+fn remove_envs_from_command(command: &mut Command, envs: &[&str]) {
+    for key in envs {
+        command.env_remove(key);
     }
 }
 

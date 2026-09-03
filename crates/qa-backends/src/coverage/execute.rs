@@ -106,6 +106,14 @@ pub(super) fn tolerant_direct_report_args(path: &Path) -> Vec<String> {
     args
 }
 
+pub(super) fn resilient_direct_report_args(path: &Path) -> Vec<String> {
+    let mut args = tolerant_direct_report_args(path);
+    args.insert(2, "--no-clean".into());
+    args.insert(3, "--failure-mode".into());
+    args.insert(4, "all".into());
+    args
+}
+
 pub(super) fn workspace_direct_report_args(
     packages: &[CoveragePackage],
     target: Option<&str>,
@@ -129,6 +137,9 @@ pub(super) fn direct_report_args(
     let mut args = vec![
         "llvm-cov".into(),
         "--ignore-run-fail".into(),
+        "--no-clean".into(),
+        "--failure-mode".into(),
+        "all".into(),
         "-p".into(),
         package.name.clone(),
         "--json".into(),
@@ -155,10 +166,20 @@ pub(super) fn run_attempt(
     env: &[(&str, String)],
     spec: AttemptSpec<'_>,
 ) -> CoverageAttempt {
+    run_attempt_with_env_removals(workspace, target_dir, env, &[], spec)
+}
+
+pub(super) fn run_attempt_with_env_removals(
+    workspace: &Path,
+    target_dir: &Path,
+    env: &[(&str, String)],
+    remove_envs: &[&str],
+    spec: AttemptSpec<'_>,
+) -> CoverageAttempt {
     let AttemptSpec { package, target, configuration, mode, args } = spec;
     let before = count_profiles(target_dir);
     let result = crate::process::with_cargo_target_dir(None, || {
-        crate::process::run(workspace, "cargo", &args, env)
+        crate::process::run_with_env_removals(workspace, "cargo", &args, env, remove_envs)
     });
     let after = count_profiles(target_dir);
     let result = classify_result(result);
@@ -256,6 +277,14 @@ pub(super) fn classify_failure(diagnostic: &str) -> String {
     } else {
         "build-or-instrumentation".into()
     }
+}
+
+pub(super) fn bindgen_clang_environment_failure(diagnostic: &str) -> bool {
+    let text = diagnostic.to_ascii_lowercase();
+    text.contains("bindgen")
+        && (text.contains("libclang")
+            || text.contains("could not find clang")
+            || text.contains("assertion `left == right` failed"))
 }
 
 fn tooling_failure(text: &str) -> bool {

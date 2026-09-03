@@ -1,3 +1,10 @@
+## 2026-09-03 - r73 recover coverage from native build failures
+
+- Fixed the external-workspace failure demonstrated by the attached Rusty Kaspa `qa-out`: the initial workspace `cargo llvm-cov` run produced 73 raw profiles and then `librocksdb-sys`/bindgen aborted with a Windows x64 host-pointer mismatch (`left: 4`, `right: 8`). QA now recognizes bindgen/libclang environment failures and retries coverage with ambient `LIBCLANG_PATH`, `CLANG_PATH`, `LLVM_CONFIG_PATH`, and `BINDGEN_EXTRA_CLANG_ARGS` overrides removed, allowing bindgen to discover the normal host libclang instead of inheriting an unrelated ESP/Xtensa or other custom clang installation.
+- Coverage no longer discards useful execution just because a later native dependency fails. After any direct workspace failure, QA first attempts to generate JSON from already-collected raw profiles. Usable salvaged evidence is retained as Partial and then augmented by package-level recovery for workspace members not represented in that report.
+- Restored package-by-package recovery to the normal direct coverage path when a workspace-wide build cannot produce JSON at all. Package recovery now reuses the same isolated cargo-llvm-cov target created by the failed workspace attempt and uses `--no-clean` plus tolerant profile merging (`--failure-mode all`), so the already-built dependency graph and raw profiles are preserved instead of being discarded and rebuilt for every member. One RocksDB/native package can therefore fail without forcing coverage/CRAP to N/A for unrelated workspace packages.
+- Package recovery retries the same bindgen/libclang remediation when an individual member hits the pointer-width/libclang failure, records all attempts in `coverage-failures.json`, and preserves real failed/covered package counts even when no package can be recovered. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r72 apply r71 rustfmt output
 
 - Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r71 strict-gate repair.

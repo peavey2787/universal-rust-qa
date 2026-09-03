@@ -316,6 +316,29 @@ fn successful_direct_primary_does_not_downgrade_unknown_package_path_attribution
 }
 
 #[test]
+fn fallback_scope_keeps_every_testable_package_eligible() {
+    let packages = vec![
+        super::super::model::CoveragePackage {
+            name: "consensus".into(),
+            root: "/workspace/consensus".into(),
+            source_loc: 10,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "wallet".into(),
+            root: "/workspace/wallet".into(),
+            source_loc: 20,
+            default_member: false,
+        },
+    ];
+    let scope = fallback_scope(&packages);
+    assert_eq!(scope.eligible.len(), 2);
+    assert!(scope.covered.is_empty());
+    assert!(scope.runtime_not_applicable.is_empty());
+    assert!(scope.incomplete_baseline);
+}
+
+#[test]
 fn successful_project_default_marks_only_metadata_default_members() {
     let packages = vec![
         super::super::model::CoveragePackage {

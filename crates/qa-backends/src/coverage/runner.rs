@@ -69,6 +69,38 @@ pub(super) fn collect_progressive(
                 Ok((workspace_count, packages, static_not_applicable)) => {
                     recovered.package_names =
                         recovery::measured_package_names(&packages, &recovered.evidence);
+                    if recovered.degraded {
+                        let missing = packages
+                            .iter()
+                            .filter(|package| !recovered.package_names.contains(&package.name))
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        if !missing.is_empty() {
+                            let scope = fallback_scope(&packages);
+                            if let Some(extra) = recovery::recover_direct_reports(
+                                workspace,
+                                output,
+                                &scope,
+                                &missing,
+                                &mut attempts,
+                            ) {
+                                super::parse::merge_evidence(
+                                    &mut recovered.evidence,
+                                    extra.evidence,
+                                );
+                                for name in extra.package_names {
+                                    if !recovered.package_names.contains(&name) {
+                                        recovered.package_names.push(name);
+                                    }
+                                }
+                                recovered.profile_count += extra.profile_count;
+                                recovery::persist_merged_evidence(
+                                    output,
+                                    &mut recovered.evidence,
+                                );
+                            }
+                        }
+                    }
                     return finalize::finalize_direct(
                         output,
                         workspace_count,
@@ -86,11 +118,55 @@ pub(super) fn collect_progressive(
                 }
             }
         }
+
+        let (workspace_count, packages, static_not_applicable) =
+            match workspace_packages(workspace, &config.coverage) {
+                Ok(value) => value,
+                Err(error) => {
+                    return finalize::metadata_error_with_attempts(output, error, attempts);
+                }
+            };
+        if packages.is_empty() {
+            return not_applicable_evidence(
+                output,
+                workspace_count,
+                static_not_applicable,
+                0,
+                attempts,
+                "no selected workspace members have Cargo-testable targets",
+            );
+        }
+        let scope = fallback_scope(&packages);
+        if let Some(mut recovered) =
+            recovery::recover_direct_reports(workspace, output, &scope, &packages, &mut attempts)
+        {
+            recovered.degraded = true;
+            return finalize::finalize_direct(
+                output,
+                workspace_count,
+                static_not_applicable,
+                &packages,
+                recovered,
+                attempts,
+            );
+        }
+        let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
+        let failed_package_names =
+            packages.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+        let eligible_package_names = failed_package_names.clone();
         return finalize::finish_collection(
             output,
             None,
             super::model::CoverageManifest {
                 schema: 1,
+                workspace_packages: workspace_count,
+                eligible_packages: packages.len(),
+                failed_packages: packages.len(),
+                not_applicable_packages: static_not_applicable.len(),
+                eligible_source_loc,
+                eligible_package_names,
+                failed_package_names,
+                not_applicable_package_names: static_not_applicable,
                 attempts,
                 ..super::model::CoverageManifest::default()
             },
@@ -204,6 +280,15 @@ fn direct_primary_enabled(config: &qa_policy::CoverageConfig) -> bool {
         && config.features.is_empty()
         && !config.no_default_features
         && !config.all_features
+}
+
+fn fallback_scope(packages: &[super::model::CoveragePackage]) -> CoverageScope {
+    CoverageScope {
+        eligible: packages.to_vec(),
+        covered: vec![],
+        runtime_not_applicable: vec![],
+        incomplete_baseline: true,
+    }
 }
 
 fn initial_states(packages: &[super::model::CoveragePackage]) -> BTreeMap<String, PackageState> {

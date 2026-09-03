@@ -1,8 +1,9 @@
 use super::super::{
     CoverageEvidence,
     execute::{
-        AttemptSpec, TestMode, count_profiles, direct_report_args, primary_direct_report_args,
-        run_attempt, tolerant_direct_report_args, workspace_direct_report_args,
+        AttemptSpec, TestMode, bindgen_clang_environment_failure, count_profiles,
+        direct_report_args, primary_direct_report_args, report_args, resilient_direct_report_args,
+        run_attempt, run_attempt_with_env_removals, workspace_direct_report_args,
     },
     model::{CoverageAttempt, CoveragePackage},
     parse,
@@ -45,19 +46,51 @@ pub(super) fn collect_primary_direct_report(
         },
     );
     let primary_failed = primary.outcome != "success";
+    let clean_clang_retry = needs_clean_clang_retry(&primary);
     attempts.push(primary);
     if let Some(evidence) = parse_direct_report(&primary_path) {
-        let profile_count = count_profiles(&target);
-        let evidence = persist_primary_report(output, &primary_path, evidence);
-        cleanup_primary_target(&target);
-        return Some(DirectRecovery {
+        return Some(finish_primary_recovery(
+            output,
+            &target,
+            &primary_path,
             evidence,
-            package_names: vec![],
-            profile_count,
-            degraded: primary_failed,
-        });
+            primary_failed,
+        ));
     }
     clear_temporary_report(&primary_path);
+
+    if clean_clang_retry {
+        let clean_path = fresh_primary_report_path(output, "clean-clang");
+        let clean = run_attempt_with_env_removals(
+            workspace,
+            &target,
+            &env,
+            CLANG_OVERRIDE_ENV,
+            AttemptSpec {
+                package: None,
+                target: None,
+                configuration: "direct-workspace-clean-clang",
+                mode: TestMode::DirectReport,
+                args: resilient_direct_report_args(&clean_path),
+            },
+        );
+        let clean_failed = clean.outcome != "success";
+        attempts.push(clean);
+        if let Some(evidence) = parse_direct_report(&clean_path) {
+            return Some(finish_primary_recovery(
+                output,
+                &target,
+                &clean_path,
+                evidence,
+                clean_failed,
+            ));
+        }
+        clear_temporary_report(&clean_path);
+    }
+
+    if let Some(recovered) = salvage_profiles(workspace, output, &target, &env, attempts) {
+        return Some(recovered);
+    }
 
     let tolerant_path = fresh_primary_report_path(output, "tolerant");
     let tolerant = run_attempt(
@@ -69,22 +102,23 @@ pub(super) fn collect_primary_direct_report(
             target: None,
             configuration: "direct-workspace-ignore-run-fail",
             mode: TestMode::DirectReport,
-            args: tolerant_direct_report_args(&tolerant_path),
+            args: resilient_direct_report_args(&tolerant_path),
         },
     );
     let tolerant_failed = tolerant.outcome != "success";
     attempts.push(tolerant);
-    let evidence = parse_direct_report(&tolerant_path);
-    let profile_count = count_profiles(&target);
-    cleanup_primary_target(&target);
-    let evidence = evidence?;
-    let evidence = persist_primary_report(output, &tolerant_path, evidence);
-    Some(DirectRecovery {
-        evidence,
-        package_names: vec![],
-        profile_count,
-        degraded: tolerant_failed,
-    })
+    if let Some(evidence) = parse_direct_report(&tolerant_path) {
+        return Some(finish_primary_recovery(
+            output,
+            &target,
+            &tolerant_path,
+            evidence,
+            tolerant_failed,
+        ));
+    }
+    clear_temporary_report(&tolerant_path);
+
+    salvage_profiles(workspace, output, &target, &env, attempts)
 }
 
 pub(super) fn recover_workspace_direct_report(
@@ -138,8 +172,9 @@ pub(super) fn recover_direct_reports(
     let mut merged =
         CoverageEvidence { status: EvidenceStatus::Available, ..CoverageEvidence::default() };
     let mut package_names = Vec::new();
-    let rescue_root = output.join("llvm-cov-rescue");
-    let mut profile_count = 0usize;
+    let rescue_target = fresh_primary_target_path(output);
+    let rescue_env = super::super::execute::coverage_env(&rescue_target);
+    let clean_clang_first = attempts.iter().any(needs_clean_clang_retry);
     let mut degraded = false;
     for (index, package) in candidates.iter().enumerate() {
         let path = output.join(format!("llvm-cov-rescue-{index}.json"));
@@ -147,24 +182,50 @@ pub(super) fn recover_direct_reports(
             degraded = true;
             continue;
         }
-        let rescue_target = rescue_root.join(format!("package-{index}"));
-        let rescue_env = super::super::execute::coverage_env(&rescue_target);
         let target_triple = recovery_target(attempts, &package.name);
-        let attempt = run_attempt(
-            workspace,
-            &rescue_target,
-            &rescue_env,
-            AttemptSpec {
-                package: Some(&package.name),
-                target: target_triple.as_deref(),
-                configuration: "direct-report-recovery",
-                mode: TestMode::DirectReport,
-                args: direct_report_args(package, target_triple.as_deref(), &path),
+        let spec = AttemptSpec {
+            package: Some(&package.name),
+            target: target_triple.as_deref(),
+            configuration: if clean_clang_first {
+                "direct-report-recovery-clean-clang"
+            } else {
+                "direct-report-recovery"
             },
-        );
+            mode: TestMode::DirectReport,
+            args: direct_report_args(package, target_triple.as_deref(), &path),
+        };
+        let attempt = if clean_clang_first {
+            run_attempt_with_env_removals(
+                workspace,
+                &rescue_target,
+                &rescue_env,
+                CLANG_OVERRIDE_ENV,
+                spec,
+            )
+        } else {
+            run_attempt(workspace, &rescue_target, &rescue_env, spec)
+        };
+        let clean_clang_retry = !clean_clang_first && needs_clean_clang_retry(&attempt);
         degraded |= attempt.outcome != "success";
-        profile_count += count_profiles(&rescue_target);
         attempts.push(attempt);
+        if clean_clang_retry && parse_direct_report(&path).is_none() {
+            clear_temporary_report(&path);
+            let retry = run_attempt_with_env_removals(
+                workspace,
+                &rescue_target,
+                &rescue_env,
+                CLANG_OVERRIDE_ENV,
+                AttemptSpec {
+                    package: Some(&package.name),
+                    target: target_triple.as_deref(),
+                    configuration: "direct-report-recovery-clean-clang",
+                    mode: TestMode::DirectReport,
+                    args: direct_report_args(package, target_triple.as_deref(), &path),
+                },
+            );
+            degraded |= retry.outcome != "success";
+            attempts.push(retry);
+        }
         let excluded = scope
             .eligible
             .iter()
@@ -180,10 +241,82 @@ pub(super) fn recover_direct_reports(
         }
         clear_temporary_report(&path);
     }
+    let profile_count = count_profiles(&rescue_target);
+    cleanup_primary_target(&rescue_target);
     if package_names.is_empty() || merged.files.is_empty() {
         return None;
     }
+    persist_merged_evidence(output, &mut merged);
     Some(DirectRecovery { evidence: merged, package_names, profile_count, degraded })
+}
+
+pub(super) fn persist_merged_evidence(output: &Path, evidence: &mut CoverageEvidence) {
+    let path = output.join("llvm-cov.json");
+    match parse::write_merged_json(&path, evidence) {
+        Ok(()) => evidence.source = Some(path.display().to_string()),
+        Err(error) => {
+            evidence.status = EvidenceStatus::Partial;
+            evidence.error = Some(match evidence.error.take() {
+                Some(existing) => format!("{existing}; {error}"),
+                None => error,
+            });
+        }
+    }
+}
+
+const CLANG_OVERRIDE_ENV: &[&str] = &[
+    "LIBCLANG_PATH",
+    "CLANG_PATH",
+    "LLVM_CONFIG_PATH",
+    "BINDGEN_EXTRA_CLANG_ARGS",
+];
+
+fn needs_clean_clang_retry(attempt: &CoverageAttempt) -> bool {
+    attempt
+        .diagnostic
+        .as_deref()
+        .is_some_and(bindgen_clang_environment_failure)
+}
+
+fn salvage_profiles(
+    workspace: &Path,
+    output: &Path,
+    target: &Path,
+    env: &[(&str, String)],
+    attempts: &mut Vec<CoverageAttempt>,
+) -> Option<DirectRecovery> {
+    if count_profiles(target) == 0 {
+        return None;
+    }
+    let path = fresh_primary_report_path(output, "profiles");
+    let attempt = run_attempt(
+        workspace,
+        target,
+        env,
+        AttemptSpec {
+            package: None,
+            target: None,
+            configuration: "direct-profile-salvage",
+            mode: TestMode::Report,
+            args: report_args(&path, true),
+        },
+    );
+    attempts.push(attempt);
+    let evidence = parse_direct_report(&path)?;
+    Some(finish_primary_recovery(output, target, &path, evidence, true))
+}
+
+fn finish_primary_recovery(
+    output: &Path,
+    target: &Path,
+    path: &Path,
+    evidence: CoverageEvidence,
+    degraded: bool,
+) -> DirectRecovery {
+    let profile_count = count_profiles(target);
+    let evidence = persist_primary_report(output, path, evidence);
+    cleanup_primary_target(target);
+    DirectRecovery { evidence, package_names: vec![], profile_count, degraded }
 }
 
 fn fresh_primary_target_path(output: &Path) -> PathBuf {
@@ -367,6 +500,34 @@ mod tests {
         assert!(clear_temporary_report(&path));
         assert!(!path.exists());
         assert!(clear_temporary_report(&path));
+    }
+
+    #[test]
+    fn merged_package_recovery_persists_canonical_json() {
+        let root = std::env::temp_dir().join(format!(
+            "urqa-merged-recovery-{}-{}",
+            std::process::id(),
+            module_path!().replace("::", "-")
+        ));
+        match fs::remove_dir_all(&root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => panic!("failed to reset merged recovery fixture: {error}"),
+        }
+        fs::create_dir_all(&root).unwrap();
+        let mut evidence = CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(50.0),
+            files: BTreeMap::from([(
+                "C:/ws/wallet/src/lib.rs".into(),
+                BTreeMap::from([(1, 1), (2, 0)]),
+            )]),
+            ..CoverageEvidence::default()
+        };
+        persist_merged_evidence(&root, &mut evidence);
+        assert_eq!(evidence.source, Some(root.join("llvm-cov.json").display().to_string()));
+        assert!(root.join("llvm-cov.json").is_file());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

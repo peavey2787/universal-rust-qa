@@ -127,6 +127,18 @@ fn tolerant_direct_collection_only_adds_ignore_run_fail_to_manual_contract() {
 }
 
 #[test]
+fn resilient_direct_collection_reuses_instrumented_builds_and_tolerates_profiles() {
+    let path = Path::new("qa-out/llvm-cov.json");
+    let args = resilient_direct_report_args(path);
+    assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
+    assert!(args.iter().any(|arg| arg == "--no-clean"));
+    assert!(args.windows(2).any(|pair| pair[0] == "--failure-mode" && pair[1] == "all"));
+    assert!(args.windows(2).any(|pair| {
+        pair[0] == "--output-path" && pair[1] == "qa-out/llvm-cov.json"
+    }));
+}
+
+#[test]
 fn workspace_direct_recovery_matches_manual_json_collection_contract() {
     let path = Path::new("qa-out/workspace.json");
     let packages = [package("consensus"), package("wallet")];
@@ -164,7 +176,20 @@ fn direct_report_recovery_is_package_scoped_and_generates_json() {
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
     assert!(!args.iter().any(|arg| arg == "--no-fail-fast"));
     assert!(!args.iter().any(|arg| arg == "--no-report"));
-    assert!(!args.iter().any(|arg| arg == "--no-clean"));
+    assert!(args.iter().any(|arg| arg == "--no-clean"));
+    assert!(args.windows(2).any(|pair| pair[0] == "--failure-mode" && pair[1] == "all"));
+}
+
+#[test]
+fn bindgen_host_pointer_mismatch_is_recognized_for_clean_clang_retry() {
+    let diagnostic = r#"error: failed to run custom build command for `librocksdb-sys`
+thread 'main' panicked at bindgen-0.72.1\lib.rs:917:13:
+assertion `left == right` failed: "x86_64-pc-windows-msvc"
+  left: 4
+ right: 8"#;
+    assert!(bindgen_clang_environment_failure(diagnostic));
+    assert!(bindgen_clang_environment_failure("bindgen could not find libclang"));
+    assert!(!bindgen_clang_environment_failure("ordinary Rust compile failure"));
 }
 
 #[test]
