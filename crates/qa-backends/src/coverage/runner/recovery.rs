@@ -353,10 +353,7 @@ fn recycle_recovery_target(
 }
 
 fn fresh_recovery_target_path(output: &Path, generation: usize) -> PathBuf {
-    output.join(format!(
-        ".cov-target-{}-rescue-{generation}",
-        std::process::id()
-    ))
+    output.join(format!(".cov-target-{}-rescue-{generation}", std::process::id()))
 }
 
 pub(super) fn persist_merged_evidence(output: &Path, evidence: &mut CoverageEvidence) {
@@ -667,13 +664,7 @@ mod tests {
         let mut profile_count = 0;
         let old_target = target.clone();
 
-        recycle_recovery_target(
-            &root,
-            &mut generation,
-            &mut target,
-            &mut env,
-            &mut profile_count,
-        );
+        recycle_recovery_target(&root, &mut generation, &mut target, &mut env, &mut profile_count);
 
         assert_eq!(profile_count, 1);
         assert_eq!(generation, 1);

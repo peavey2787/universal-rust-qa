@@ -1,3 +1,8 @@
+## 2026-09-03 - r78 apply r77 rustfmt output
+
+- Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r77 coverage-recovery changes.
+- No coverage behavior changed; the r77 bounded scratch-target recycling, disk-exhaustion retry, and resource classification logic are unchanged. Advanced the visible development revision to r78; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r77 bound coverage recovery storage
 
 - Fixed the remaining large-workspace coverage failure exposed by the r76 Rusty Kaspa run. The uploaded `coverage-failures.json` shows that coverage had progressed to 13/69 packages before the shared package-recovery target exhausted the Windows volume; 50 later package attempts then failed with `database or disk is full`, `no space on device`, or Windows `os error 112`. Those were not 50 independent Kaspa coverage incompatibilities.
