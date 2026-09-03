@@ -113,10 +113,7 @@ fn process_tree(root_pid: u32) -> io::Result<ProcessTree> {
             break;
         }
     }
-    let members = depths
-        .into_iter()
-        .map(|(pid, depth)| TreeMember { pid, depth })
-        .collect();
+    let members = depths.into_iter().map(|(pid, depth)| TreeMember { pid, depth }).collect();
     Ok(ProcessTree { root_present, members })
 }
 
@@ -126,20 +123,15 @@ fn process_snapshot() -> io::Result<Vec<ProcessEntry>> {
         return Err(io::Error::last_os_error());
     }
     let snapshot = OwnedHandle(snapshot);
-    let mut entry = PROCESSENTRY32W {
-        dwSize: size_of::<PROCESSENTRY32W>() as u32,
-        ..Default::default()
-    };
+    let mut entry =
+        PROCESSENTRY32W { dwSize: size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
     if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
         return Err(io::Error::last_os_error());
     }
 
     let mut rows = Vec::new();
     loop {
-        rows.push(ProcessEntry {
-            pid: entry.th32ProcessID,
-            parent_pid: entry.th32ParentProcessID,
-        });
+        rows.push(ProcessEntry { pid: entry.th32ProcessID, parent_pid: entry.th32ParentProcessID });
         entry.dwSize = size_of::<PROCESSENTRY32W>() as u32;
         if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
             break;

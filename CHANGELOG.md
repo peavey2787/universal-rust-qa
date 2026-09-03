@@ -1,3 +1,8 @@
+## 2026-09-03 - r83 apply r82 rustfmt output
+
+- Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r82 native Windows process-control changes.
+- No process-control or coverage behavior changed; the r82 Tool Help process-tree enumeration, native suspend/resume/terminate operations, and watchdog cleanup remain unchanged. Advanced the visible development revision to r83; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r82 make Windows process control native and bounded
 
 - Fixed the Windows self-test failures in controlled pause/resume/skip and completion-watch cleanup. The old control path launched a fresh PowerShell process, compiled an `Add-Type` helper, and enumerated `Win32_Process` through CIM for every suspend, resume, or descendant-cleanup operation. On a cold Windows host that helper can take seconds, blocking the 80 ms monitor loop long enough for short-lived child commands to finish naturally before a queued skip or forced cleanup is observed.
