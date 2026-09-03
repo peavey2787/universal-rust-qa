@@ -1,3 +1,8 @@
+## 2026-09-03 - r84 satisfy strict Windows process-control Clippy
+
+- Updated the native Windows process-control loader to use a C string literal for `ntdll.dll` and an explicitly typed function-pointer transmute, satisfying the stable Rust 1.98.1 `-D warnings` diagnostics (`manual_c_str_literals` and `missing_transmute_annotations`) reported by the Windows self-hardening gate.
+- No process-control or coverage behavior changed; the r82 native Tool Help / NT suspend-resume / terminate implementation and the r80 coverage recovery logic remain unchanged. Advanced the visible development revision to r84; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r83 apply r82 rustfmt output
 
 - Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r82 native Windows process-control changes.

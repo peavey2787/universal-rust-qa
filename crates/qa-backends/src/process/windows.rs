@@ -170,7 +170,7 @@ fn apply_action(pid: u32, action: ProcessAction) -> io::Result<bool> {
 type NtProcessControl = unsafe extern "system" fn(HANDLE) -> i32;
 
 fn nt_process_control(handle: HANDLE, symbol: &[u8], action: &str) -> io::Result<bool> {
-    let module = unsafe { GetModuleHandleA(b"ntdll.dll\0".as_ptr()) };
+    let module = unsafe { GetModuleHandleA(c"ntdll.dll".as_ptr().cast()) };
     if module.is_null() {
         return Err(io::Error::last_os_error());
     }
@@ -178,7 +178,9 @@ fn nt_process_control(handle: HANDLE, symbol: &[u8], action: &str) -> io::Result
     let Some(operation) = operation else {
         return Err(io::Error::last_os_error());
     };
-    let operation = unsafe { std::mem::transmute::<_, NtProcessControl>(operation) };
+    let operation = unsafe {
+        std::mem::transmute::<unsafe extern "system" fn() -> isize, NtProcessControl>(operation)
+    };
     let status = unsafe { operation(handle) };
     if status >= 0 {
         Ok(true)
