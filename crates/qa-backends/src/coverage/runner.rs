@@ -94,10 +94,7 @@ pub(super) fn collect_progressive(
                                     }
                                 }
                                 recovered.profile_count += extra.profile_count;
-                                recovery::persist_merged_evidence(
-                                    output,
-                                    &mut recovered.evidence,
-                                );
+                                recovery::persist_merged_evidence(output, &mut recovered.evidence);
                             }
                         }
                     }

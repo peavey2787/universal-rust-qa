@@ -264,18 +264,11 @@ pub(super) fn persist_merged_evidence(output: &Path, evidence: &mut CoverageEvid
     }
 }
 
-const CLANG_OVERRIDE_ENV: &[&str] = &[
-    "LIBCLANG_PATH",
-    "CLANG_PATH",
-    "LLVM_CONFIG_PATH",
-    "BINDGEN_EXTRA_CLANG_ARGS",
-];
+const CLANG_OVERRIDE_ENV: &[&str] =
+    &["LIBCLANG_PATH", "CLANG_PATH", "LLVM_CONFIG_PATH", "BINDGEN_EXTRA_CLANG_ARGS"];
 
 fn needs_clean_clang_retry(attempt: &CoverageAttempt) -> bool {
-    attempt
-        .diagnostic
-        .as_deref()
-        .is_some_and(bindgen_clang_environment_failure)
+    attempt.diagnostic.as_deref().is_some_and(bindgen_clang_environment_failure)
 }
 
 fn salvage_profiles(

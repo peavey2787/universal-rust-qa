@@ -133,9 +133,10 @@ fn resilient_direct_collection_reuses_instrumented_builds_and_tolerates_profiles
     assert!(args.iter().any(|arg| arg == "--ignore-run-fail"));
     assert!(args.iter().any(|arg| arg == "--no-clean"));
     assert!(args.windows(2).any(|pair| pair[0] == "--failure-mode" && pair[1] == "all"));
-    assert!(args.windows(2).any(|pair| {
-        pair[0] == "--output-path" && pair[1] == "qa-out/llvm-cov.json"
-    }));
+    assert!(
+        args.windows(2)
+            .any(|pair| { pair[0] == "--output-path" && pair[1] == "qa-out/llvm-cov.json" })
+    );
 }
 
 #[test]

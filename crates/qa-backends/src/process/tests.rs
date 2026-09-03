@@ -235,12 +235,13 @@ fn explicit_environment_removals_override_ambient_values() {
     command.env("KEEP_ME", "yes");
     remove_envs_from_command(&mut command, &["LIBCLANG_PATH"]);
     let envs = command.get_envs().collect::<Vec<_>>();
+    assert!(
+        envs.iter().any(|(key, value)| {
+            *key == std::ffi::OsStr::new("LIBCLANG_PATH") && value.is_none()
+        })
+    );
     assert!(envs.iter().any(|(key, value)| {
-        *key == std::ffi::OsStr::new("LIBCLANG_PATH") && value.is_none()
-    }));
-    assert!(envs.iter().any(|(key, value)| {
-        *key == std::ffi::OsStr::new("KEEP_ME")
-            && *value == Some(std::ffi::OsStr::new("yes"))
+        *key == std::ffi::OsStr::new("KEEP_ME") && *value == Some(std::ffi::OsStr::new("yes"))
     }));
 }
 

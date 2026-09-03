@@ -1,3 +1,8 @@
+## 2026-09-03 - r74 apply r73 rustfmt output
+
+- Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r73 native-build coverage recovery changes.
+- No coverage behavior changed; the r73 bindgen/libclang retry, raw-profile salvage, and package-level recovery logic are unchanged. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r73 recover coverage from native build failures
 
 - Fixed the external-workspace failure demonstrated by the attached Rusty Kaspa `qa-out`: the initial workspace `cargo llvm-cov` run produced 73 raw profiles and then `librocksdb-sys`/bindgen aborted with a Windows x64 host-pointer mismatch (`left: 4`, `right: 8`). QA now recognizes bindgen/libclang environment failures and retries coverage with ambient `LIBCLANG_PATH`, `CLANG_PATH`, `LLVM_CONFIG_PATH`, and `BINDGEN_EXTRA_CLANG_ARGS` overrides removed, allowing bindgen to discover the normal host libclang instead of inheriting an unrelated ESP/Xtensa or other custom clang installation.
