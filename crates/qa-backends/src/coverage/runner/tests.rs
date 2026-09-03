@@ -331,14 +331,7 @@ fn direct_completion_only_supersedes_recoverable_environment_failures() {
         vec![],
         &packages,
         recovered(),
-        vec![attempt(
-            None,
-            "direct-workspace-primary",
-            "failed",
-            Some("test-failure"),
-            0,
-            1,
-        )],
+        vec![attempt(None, "direct-workspace-primary", "failed", Some("test-failure"), 0, 1)],
     );
     assert_eq!(failed_test.status, EvidenceStatus::Partial);
     fs::remove_dir_all(test_root).unwrap();
@@ -625,10 +618,7 @@ fn successful_direct_primary_schedules_recovery_for_unattributed_members() {
         degraded: false,
     };
     let missing = direct_recovery_candidates(&packages, &successful);
-    assert_eq!(
-        missing.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(),
-        ["wallet"]
-    );
+    assert_eq!(missing.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(), ["wallet"]);
 
     let complete = recovery::DirectRecovery {
         evidence: CoverageEvidence::default(),

@@ -205,12 +205,7 @@ fn bindgen_conflicting_env_keys_from(
         .filter(|key| bindgen_conflicting_env_key(key, replace_clang_locator))
         .collect::<Vec<_>>();
     let required = if replace_clang_locator {
-        &[
-            "LIBCLANG_PATH",
-            "CLANG_PATH",
-            "LLVM_CONFIG_PATH",
-            "BINDGEN_EXTRA_CLANG_ARGS",
-        ][..]
+        &["LIBCLANG_PATH", "CLANG_PATH", "LLVM_CONFIG_PATH", "BINDGEN_EXTRA_CLANG_ARGS"][..]
     } else {
         &["BINDGEN_EXTRA_CLANG_ARGS"][..]
     };

@@ -102,9 +102,7 @@ static HOST_LIBCLANG_DIR: OnceLock<Option<String>> = OnceLock::new();
 
 #[cfg(windows)]
 pub(super) fn ensure_host_libclang_dir(workspace: &Path) -> Option<String> {
-    HOST_LIBCLANG_DIR
-        .get_or_init(|| discover_or_provision_host_libclang(workspace))
-        .clone()
+    HOST_LIBCLANG_DIR.get_or_init(|| discover_or_provision_host_libclang(workspace)).clone()
 }
 
 #[cfg(not(windows))]
@@ -125,8 +123,8 @@ fn discover_or_provision_host_libclang(workspace: &Path) -> Option<String> {
         return None;
     }
 
-    let installed = query_visual_studio_install(workspace, &vswhere, WINDOWS_LLVM_COMPONENT)
-        .unwrap_or(install);
+    let installed =
+        query_visual_studio_install(workspace, &vswhere, WINDOWS_LLVM_COMPONENT).unwrap_or(install);
     find_visual_studio_libclang(&installed)
         .or_else(discover_standard_llvm_libclang)
         .map(|path| path.display().to_string())
@@ -222,9 +220,7 @@ fn visual_studio_modify_args(install: &str, component: &str) -> Vec<String> {
 
 #[cfg(windows)]
 fn find_visual_studio_libclang(install: &Path) -> Option<PathBuf> {
-    visual_studio_llvm_dirs(install)
-        .into_iter()
-        .find_map(|path| valid_libclang_dir(&path))
+    visual_studio_llvm_dirs(install).into_iter().find_map(|path| valid_libclang_dir(&path))
 }
 
 #[cfg(any(windows, test))]
@@ -285,16 +281,8 @@ mod tests {
         assert_eq!(dirs.len(), 2);
         assert_eq!(
             dirs[0],
-            Path::new(r"C:\VS")
-                .join("VC")
-                .join("Tools")
-                .join("Llvm")
-                .join("x64")
-                .join("bin")
+            Path::new(r"C:\VS").join("VC").join("Tools").join("Llvm").join("x64").join("bin")
         );
-        assert_eq!(
-            dirs[1],
-            Path::new(r"C:\VS").join("VC").join("Tools").join("Llvm").join("bin")
-        );
+        assert_eq!(dirs[1], Path::new(r"C:\VS").join("VC").join("Tools").join("Llvm").join("bin"));
     }
 }

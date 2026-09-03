@@ -199,8 +199,7 @@ pub(super) fn finalize_progressive(
             degraded |= recovered.degraded;
             profile_count += recovered.profile_count;
             if !recovered.package_names.is_empty() {
-                if let Some(existing) =
-                    parsed.as_mut().filter(|evidence| usable_coverage(evidence))
+                if let Some(existing) = parsed.as_mut().filter(|evidence| usable_coverage(evidence))
                 {
                     parse::merge_evidence(existing, recovered.evidence);
                 } else {

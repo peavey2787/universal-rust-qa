@@ -1,3 +1,8 @@
+## 2026-09-03 - r81 apply r80 rustfmt output
+
+- Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r80 complete-coverage recovery changes.
+- No coverage behavior changed; the r80 host-libclang recovery, runtime `NotApplicable` accounting, and complete-eligible-package finalization logic are unchanged. Advanced the visible development revision to r81; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r80 complete eligible coverage recovery
 
 - Diagnosed the r79 Rusty Kaspa coverage manifest instead of treating 46/69 as a project limit. Seventeen of the remaining package failures were `librocksdb-sys`/bindgen failures after the recovery path removed a cross-toolchain Clang environment but no host `libclang` remained; six other targeted `cargo llvm-cov` commands succeeded yet emitted no executable line regions owned by those packages under the selected test scope.
