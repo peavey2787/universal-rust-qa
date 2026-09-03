@@ -2,7 +2,8 @@ use super::super::{
     CoverageEvidence,
     execute::{AttemptSpec, TestMode, count_profiles, report_args, run_attempt},
     manifest::{
-        failed_report_detail, metadata_failure, partial_detail, scope_percent, write_manifest,
+        failed_report_detail, metadata_failure, not_applicable_evidence, partial_detail,
+        scope_percent, write_manifest,
     },
     model::{CoverageAttempt, CoverageManifest, CoveragePackage},
     parse,
@@ -25,50 +26,53 @@ pub(super) fn finalize_direct(
     recovered: DirectRecovery,
     attempts: Vec<CoverageAttempt>,
 ) -> CoverageEvidence {
-    let command_complete = !recovered.degraded;
-    let measured = if command_complete {
-        packages.iter().collect::<Vec<_>>()
-    } else {
-        packages
-            .iter()
-            .filter(|package| recovered.package_names.contains(&package.name))
-            .collect::<Vec<_>>()
-    };
+    let mut not_applicable_package_names = static_not_applicable;
+    for name in &recovered.not_applicable_package_names {
+        if !not_applicable_package_names.contains(name) {
+            not_applicable_package_names.push(name.clone());
+        }
+    }
+    let eligible = packages
+        .iter()
+        .filter(|package| !recovered.not_applicable_package_names.contains(&package.name))
+        .collect::<Vec<_>>();
+    let measured = eligible
+        .iter()
+        .copied()
+        .filter(|package| recovered.package_names.contains(&package.name))
+        .collect::<Vec<_>>();
+    if eligible.is_empty() && !packages.is_empty() {
+        return not_applicable_evidence(
+            output,
+            workspace_count,
+            not_applicable_package_names,
+            recovered.profile_count,
+            attempts,
+            "coverage not applicable: selected packages produced no executable line regions under the requested test scope",
+        );
+    }
     let covered_roots = measured.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
-    let excluded_roots = if command_complete {
-        vec![]
-    } else {
-        packages
-            .iter()
-            .filter(|package| !recovered.package_names.contains(&package.name))
-            .map(|package| package.root.clone())
-            .collect::<Vec<_>>()
-    };
-    let eligible_package_names =
-        packages.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let covered_package_names =
-        measured.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let failed_package_names = if command_complete {
-        vec![]
-    } else {
-        packages
-            .iter()
-            .filter(|package| !recovered.package_names.contains(&package.name))
-            .map(|package| package.name.clone())
-            .collect::<Vec<_>>()
-    };
-    let eligible_source_loc = packages.iter().map(|package| package.source_loc).sum();
+    let excluded_roots = packages
+        .iter()
+        .filter(|package| !recovered.package_names.contains(&package.name))
+        .map(|package| package.root.clone())
+        .collect::<Vec<_>>();
+    let eligible_package_names = eligible.iter().map(|package| package.name.clone()).collect();
+    let covered_package_names = measured.iter().map(|package| package.name.clone()).collect();
+    let failed_package_names = eligible
+        .iter()
+        .filter(|package| !recovered.package_names.contains(&package.name))
+        .map(|package| package.name.clone())
+        .collect::<Vec<_>>();
+    let eligible_source_loc = eligible.iter().map(|package| package.source_loc).sum();
     let covered_source_loc = measured.iter().map(|package| package.source_loc).sum();
     let mut evidence = recovered.evidence;
-    if recovered.degraded && usable_coverage(&evidence) {
-        evidence.status = EvidenceStatus::Partial;
-        evidence.error = Some(append_error(
-            evidence.error.take(),
-            "cargo llvm-cov returned nonzero but produced usable JSON; measured coverage was retained"
-                .into(),
-        ));
+    if usable_coverage(&evidence) && measured.len() != packages.len() {
+        parse::retain_package_scope(&mut evidence, &covered_roots, &excluded_roots);
     }
-    let degraded = recovered.degraded || evidence.status == EvidenceStatus::Partial;
+    let degraded = !failed_package_names.is_empty()
+        || evidence.status == EvidenceStatus::Partial
+        || (recovered.degraded && has_sticky_direct_failure(&attempts));
     finish_collection(
         output,
         Some(evidence),
@@ -76,17 +80,17 @@ pub(super) fn finalize_direct(
             schema: 1,
             status: String::new(),
             workspace_packages: workspace_count,
-            eligible_packages: packages.len(),
+            eligible_packages: eligible.len(),
             covered_packages: measured.len(),
             failed_packages: failed_package_names.len(),
-            not_applicable_packages: static_not_applicable.len(),
+            not_applicable_packages: not_applicable_package_names.len(),
             eligible_source_loc,
             covered_source_loc,
             profile_count: recovered.profile_count,
             eligible_package_names,
             covered_package_names,
             failed_package_names,
-            not_applicable_package_names: static_not_applicable,
+            not_applicable_package_names,
             covered_package_roots: covered_roots,
             excluded_package_roots: excluded_roots,
             attempts,
@@ -168,6 +172,7 @@ pub(super) fn finalize_progressive(
         vec![]
     };
     let mut recovery_used = false;
+    let mut recovered_not_applicable_names = Vec::new();
 
     if parsed.as_ref().is_none_or(|evidence| !usable_coverage(evidence)) {
         if let Some(recovered) =
@@ -193,22 +198,52 @@ pub(super) fn finalize_progressive(
         {
             degraded |= recovered.degraded;
             profile_count += recovered.profile_count;
-            if let Some(existing) = parsed.as_mut().filter(|evidence| usable_coverage(evidence)) {
-                parse::merge_evidence(existing, recovered.evidence);
-            } else {
-                parsed = Some(recovered.evidence);
+            if !recovered.package_names.is_empty() {
+                if let Some(existing) =
+                    parsed.as_mut().filter(|evidence| usable_coverage(evidence))
+                {
+                    parse::merge_evidence(existing, recovered.evidence);
+                } else {
+                    parsed = Some(recovered.evidence);
+                }
             }
             for name in recovered.package_names {
                 if !measured_names.contains(&name) {
                     measured_names.push(name);
                 }
             }
+            for name in recovered.not_applicable_package_names {
+                if !recovered_not_applicable_names.contains(&name) {
+                    recovered_not_applicable_names.push(name);
+                }
+            }
             recovery_used = true;
         }
     }
-    let measured = scope
+    let eligible = scope
         .eligible
         .iter()
+        .filter(|package| !recovered_not_applicable_names.contains(&package.name))
+        .collect::<Vec<_>>();
+    let not_applicable_package_names = static_not_applicable
+        .iter()
+        .cloned()
+        .chain(scope.runtime_not_applicable.iter().map(|package| package.name.clone()))
+        .chain(recovered_not_applicable_names.iter().cloned())
+        .collect::<Vec<_>>();
+    if eligible.is_empty() && !scope.eligible.is_empty() {
+        return not_applicable_evidence(
+            output,
+            workspace_count,
+            not_applicable_package_names,
+            profile_count,
+            attempts,
+            "coverage not applicable: selected packages produced no executable line regions under the requested test scope",
+        );
+    }
+    let measured = eligible
+        .iter()
+        .copied()
         .filter(|package| measured_names.iter().any(|name| name == &package.name))
         .collect::<Vec<_>>();
     let covered_roots = measured.iter().map(|package| package.root.clone()).collect::<Vec<_>>();
@@ -233,24 +268,19 @@ pub(super) fn finalize_progressive(
             }
         }
     }
-    let failed_package_names = scope
-        .eligible
+    let failed_package_names = eligible
         .iter()
+        .copied()
         .filter(|package| !measured.iter().any(|covered| covered.name == package.name))
         .map(|package| package.name.clone())
         .collect::<Vec<_>>();
-    let eligible_source_loc = scope.eligible.iter().map(|package| package.source_loc).sum();
+    let eligible_source_loc = eligible.iter().map(|package| package.source_loc).sum();
     let covered_source_loc = measured.iter().map(|package| package.source_loc).sum();
     let eligible_package_names =
-        scope.eligible.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
+        eligible.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
     let covered_package_names =
         measured.iter().map(|package| package.name.clone()).collect::<Vec<_>>();
-    let not_applicable_package_names = static_not_applicable
-        .iter()
-        .cloned()
-        .chain(scope.runtime_not_applicable.iter().map(|package| package.name.clone()))
-        .collect::<Vec<_>>();
-    degraded |= measured.len() != scope.eligible.len() || has_test_execution_failure(&attempts);
+    degraded |= measured.len() != eligible.len() || has_test_execution_failure(&attempts);
     finish_collection(
         output,
         parsed,
@@ -258,7 +288,7 @@ pub(super) fn finalize_progressive(
             schema: 1,
             status: String::new(),
             workspace_packages: workspace_count,
-            eligible_packages: scope.eligible.len(),
+            eligible_packages: eligible.len(),
             covered_packages: measured.len(),
             failed_packages: failed_package_names.len(),
             not_applicable_packages: not_applicable_package_names.len(),
@@ -275,6 +305,16 @@ pub(super) fn finalize_progressive(
         },
         degraded,
     )
+}
+
+fn has_sticky_direct_failure(attempts: &[CoverageAttempt]) -> bool {
+    attempts.iter().any(|attempt| {
+        attempt.outcome != "success"
+            && !matches!(
+                attempt.category.as_deref(),
+                Some("environment-bindgen-clang" | "resource-exhaustion")
+            )
+    })
 }
 
 fn has_test_execution_failure(attempts: &[CoverageAttempt]) -> bool {

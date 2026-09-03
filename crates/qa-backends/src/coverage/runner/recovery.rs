@@ -3,7 +3,7 @@ use super::super::{
     execute::{
         AttemptSpec, TestMode, bindgen_clang_environment_failure, count_profiles,
         direct_report_args, primary_direct_report_args, report_args, resilient_direct_report_args,
-        run_attempt, run_attempt_with_env_removals, workspace_direct_report_args,
+        run_attempt, run_attempt_with_host_bindgen, workspace_direct_report_args,
     },
     model::{CoverageAttempt, CoveragePackage},
     parse,
@@ -20,6 +20,7 @@ use std::{
 pub(super) struct DirectRecovery {
     pub(super) evidence: CoverageEvidence,
     pub(super) package_names: Vec<String>,
+    pub(super) not_applicable_package_names: Vec<String>,
     pub(super) profile_count: usize,
     pub(super) degraded: bool,
 }
@@ -46,7 +47,7 @@ pub(super) fn collect_primary_direct_report(
         },
     );
     let primary_failed = primary.outcome != "success";
-    let clean_clang_retry = needs_clean_clang_retry(&primary);
+    let bindgen_retry = needs_bindgen_retry(&primary);
     attempts.push(primary);
     if let Some(evidence) = parse_direct_report(&primary_path) {
         return Some(finish_primary_recovery(
@@ -59,30 +60,29 @@ pub(super) fn collect_primary_direct_report(
     }
     clear_temporary_report(&primary_path);
 
-    if clean_clang_retry {
-        let clean_path = fresh_primary_report_path(output, "clean-clang");
-        let clean = run_attempt_with_env_removals(
+    if bindgen_retry {
+        let clean_path = fresh_primary_report_path(output, "host-bindgen");
+        let retry = run_attempt_with_host_bindgen(
             workspace,
             &target,
             &env,
-            CLANG_OVERRIDE_ENV,
             AttemptSpec {
                 package: None,
                 target: None,
-                configuration: "direct-workspace-clean-clang",
+                configuration: "direct-workspace-host-bindgen",
                 mode: TestMode::DirectReport,
                 args: resilient_direct_report_args(&clean_path),
             },
         );
-        let clean_failed = clean.outcome != "success";
-        attempts.push(clean);
+        let retry_failed = retry.outcome != "success";
+        attempts.push(retry);
         if let Some(evidence) = parse_direct_report(&clean_path) {
             return Some(finish_primary_recovery(
                 output,
                 &target,
                 &clean_path,
                 evidence,
-                clean_failed,
+                retry_failed,
             ));
         }
         clear_temporary_report(&clean_path);
@@ -159,7 +159,13 @@ pub(super) fn recover_workspace_direct_report(
     if package_names.is_empty() {
         return None;
     }
-    Some(DirectRecovery { evidence, package_names, profile_count, degraded })
+    Some(DirectRecovery {
+        evidence,
+        package_names,
+        not_applicable_package_names: vec![],
+        profile_count,
+        degraded,
+    })
 }
 
 const MAX_PACKAGES_PER_RECOVERY_TARGET: usize = 8;
@@ -174,11 +180,12 @@ pub(super) fn recover_direct_reports(
     let mut merged =
         CoverageEvidence { status: EvidenceStatus::Available, ..CoverageEvidence::default() };
     let mut package_names = Vec::new();
+    let mut not_applicable_package_names = Vec::new();
     let mut rescue_generation = 0;
     let mut rescue_target = fresh_recovery_target_path(output, rescue_generation);
     cleanup_primary_target(&rescue_target);
     let mut rescue_env = super::super::execute::coverage_env(&rescue_target);
-    let clean_clang_first = attempts.iter().any(needs_clean_clang_retry);
+    let sanitize_bindgen_first = attempts.iter().any(needs_bindgen_retry);
     let mut degraded = false;
     let mut completed_profile_count = 0;
     let mut packages_in_target = 0;
@@ -193,7 +200,7 @@ pub(super) fn recover_direct_reports(
         let config = PackageRecoveryConfig {
             target_triple: target_triple.as_deref(),
             path: &path,
-            clean_clang_first,
+            sanitize_bindgen_first,
         };
         let mut run = run_package_direct_recovery(
             workspace,
@@ -203,8 +210,6 @@ pub(super) fn recover_direct_reports(
             config,
             attempts,
         );
-        degraded |= run.degraded;
-
         if run.storage_exhausted && parse_direct_report(&path).is_none() {
             recycle_recovery_target(
                 output,
@@ -223,9 +228,10 @@ pub(super) fn recover_direct_reports(
                 config,
                 attempts,
             );
-            degraded |= run.degraded;
         }
+        degraded |= run.degraded;
 
+        let full_report_usable = parse_direct_report(&path).is_some();
         let excluded = scope
             .eligible
             .iter()
@@ -238,6 +244,10 @@ pub(super) fn recover_direct_reports(
         {
             parse::merge_evidence(&mut merged, evidence);
             package_names.push(package.name.clone());
+        } else if run.succeeded && full_report_usable {
+            not_applicable_package_names.push(package.name.clone());
+        } else if run.succeeded {
+            degraded = true;
         }
         clear_temporary_report(&path);
         packages_in_target += 1;
@@ -256,24 +266,36 @@ pub(super) fn recover_direct_reports(
 
     let profile_count = completed_profile_count + count_profiles(&rescue_target);
     cleanup_primary_target(&rescue_target);
-    if package_names.is_empty() || merged.files.is_empty() {
+    if package_names.is_empty() && not_applicable_package_names.is_empty() {
         return None;
     }
-    persist_merged_evidence(output, &mut merged);
-    Some(DirectRecovery { evidence: merged, package_names, profile_count, degraded })
+    if !package_names.is_empty() {
+        if merged.files.is_empty() {
+            return None;
+        }
+        persist_merged_evidence(output, &mut merged);
+    }
+    Some(DirectRecovery {
+        evidence: merged,
+        package_names,
+        not_applicable_package_names,
+        profile_count,
+        degraded,
+    })
 }
 
 #[derive(Debug, Clone, Copy)]
 struct PackageRecoveryConfig<'a> {
     target_triple: Option<&'a str>,
     path: &'a Path,
-    clean_clang_first: bool,
+    sanitize_bindgen_first: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct PackageRecoveryRun {
     degraded: bool,
     storage_exhausted: bool,
+    succeeded: bool,
 }
 
 fn run_package_direct_recovery(
@@ -284,53 +306,48 @@ fn run_package_direct_recovery(
     config: PackageRecoveryConfig<'_>,
     attempts: &mut Vec<CoverageAttempt>,
 ) -> PackageRecoveryRun {
-    let PackageRecoveryConfig { target_triple, path, clean_clang_first } = config;
+    let PackageRecoveryConfig { target_triple, path, sanitize_bindgen_first } = config;
     let spec = AttemptSpec {
         package: Some(&package.name),
         target: target_triple,
-        configuration: if clean_clang_first {
-            "direct-report-recovery-clean-clang"
+        configuration: if sanitize_bindgen_first {
+            "direct-report-recovery-host-bindgen"
         } else {
             "direct-report-recovery"
         },
         mode: TestMode::DirectReport,
         args: direct_report_args(package, target_triple, path),
     };
-    let attempt = if clean_clang_first {
-        run_attempt_with_env_removals(
-            workspace,
-            rescue_target,
-            rescue_env,
-            CLANG_OVERRIDE_ENV,
-            spec,
-        )
+    let attempt = if sanitize_bindgen_first {
+        run_attempt_with_host_bindgen(workspace, rescue_target, rescue_env, spec)
     } else {
         run_attempt(workspace, rescue_target, rescue_env, spec)
     };
-    let clean_clang_retry = !clean_clang_first && needs_clean_clang_retry(&attempt);
+    let bindgen_retry = !sanitize_bindgen_first && needs_bindgen_retry(&attempt);
     let mut run = PackageRecoveryRun {
         degraded: attempt.outcome != "success",
         storage_exhausted: resource_exhausted(&attempt),
+        succeeded: attempt.outcome == "success",
     };
     attempts.push(attempt);
 
-    if clean_clang_retry && parse_direct_report(path).is_none() {
+    if bindgen_retry && parse_direct_report(path).is_none() {
         clear_temporary_report(path);
-        let retry = run_attempt_with_env_removals(
+        let retry = run_attempt_with_host_bindgen(
             workspace,
             rescue_target,
             rescue_env,
-            CLANG_OVERRIDE_ENV,
             AttemptSpec {
                 package: Some(&package.name),
                 target: target_triple,
-                configuration: "direct-report-recovery-clean-clang",
+                configuration: "direct-report-recovery-host-bindgen",
                 mode: TestMode::DirectReport,
                 args: direct_report_args(package, target_triple, path),
             },
         );
-        run.degraded |= retry.outcome != "success";
+        run.degraded = retry.outcome != "success";
         run.storage_exhausted = resource_exhausted(&retry);
+        run.succeeded = retry.outcome == "success";
         attempts.push(retry);
     }
     run
@@ -377,11 +394,9 @@ pub(super) fn persist_merged_evidence(output: &Path, evidence: &mut CoverageEvid
     }
 }
 
-const CLANG_OVERRIDE_ENV: &[&str] =
-    &["LIBCLANG_PATH", "CLANG_PATH", "LLVM_CONFIG_PATH", "BINDGEN_EXTRA_CLANG_ARGS"];
-
-fn needs_clean_clang_retry(attempt: &CoverageAttempt) -> bool {
-    attempt.diagnostic.as_deref().is_some_and(bindgen_clang_environment_failure)
+fn needs_bindgen_retry(attempt: &CoverageAttempt) -> bool {
+    attempt.category.as_deref() == Some("environment-bindgen-clang")
+        || attempt.diagnostic.as_deref().is_some_and(bindgen_clang_environment_failure)
 }
 
 fn salvage_profiles(
@@ -422,7 +437,13 @@ fn finish_primary_recovery(
     let profile_count = count_profiles(target);
     let evidence = persist_primary_report(output, path, evidence);
     cleanup_primary_target(target);
-    DirectRecovery { evidence, package_names: vec![], profile_count, degraded }
+    DirectRecovery {
+        evidence,
+        package_names: vec![],
+        not_applicable_package_names: vec![],
+        profile_count,
+        degraded,
+    }
 }
 
 fn fresh_primary_target_path(output: &Path) -> PathBuf {

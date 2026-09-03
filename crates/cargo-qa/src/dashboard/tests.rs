@@ -100,6 +100,11 @@ fn dashboard_action_table_exit_and_location_helpers_are_exact() {
     summary.coverage.eligible_packages = 83;
     assert!(provisional_text(&summary).contains("coverage collection PARTIAL"));
     assert!(coverage_label(&summary).contains("96.00% PARTIAL (scope 71.4%, 73/83)"));
+    summary.coverage.status = qa_model::EvidenceStatus::Available;
+    summary.coverage.not_applicable_packages = 6;
+    summary.coverage.covered_packages = 77;
+    summary.coverage.eligible_packages = 77;
+    assert!(coverage_label(&summary).contains("96.00% COMPLETE (scope 100.0%, 77/77, N/A 6)"));
     summary.coverage.status = qa_model::EvidenceStatus::Failed;
     assert!(provisional_text(&summary).contains("coverage collection FAILED"));
     summary.coverage.status = qa_model::EvidenceStatus::Unavailable;
@@ -173,7 +178,7 @@ fn live_dashboard_renders_pending_running_paused_and_complete_states() {
         elapsed_seconds: 65,
     };
     let pending_text = live_dashboard_text(&config, &pending);
-    assert!(pending_text.contains("UNIVERSAL RUST QA r79"));
+    assert!(pending_text.contains("UNIVERSAL RUST QA r80"));
     assert!(pending_text.contains("HEALTH   N/A"));
     assert!(pending_text.contains("coverage"));
     assert!(pending_text.contains("cargo llvm-cov"));

@@ -191,3 +191,23 @@ fn partial_coverage_summary_exposes_package_source_and_profile_scope() {
     assert!(text.contains("N/A 4"));
     assert!(text.contains("profiles 75"));
 }
+
+#[test]
+fn complete_coverage_summary_exposes_runtime_not_applicable_packages() {
+    let mut report = report();
+    report.summary.coverage = CoverageSummary {
+        percent: Some(82.5),
+        status: EvidenceStatus::Available,
+        eligible_packages: 63,
+        covered_packages: 63,
+        not_applicable_packages: 6,
+        eligible_source_loc: 120_000,
+        covered_source_loc: 120_000,
+        profile_count: 900,
+        ..CoverageSummary::default()
+    };
+    let text = summary_text(&report, &QaConfig::default());
+    assert!(text.contains("coverage 82.50% COMPLETE"));
+    assert!(text.contains("packages 63/63"));
+    assert!(text.contains("N/A 6"));
+}

@@ -4,7 +4,7 @@ use super::{
 };
 use qa_policy::CoverageConfig;
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -169,6 +169,69 @@ pub(super) fn run_attempt(
     run_attempt_with_env_removals(workspace, target_dir, env, &[], spec)
 }
 
+pub(super) fn run_attempt_with_host_bindgen(
+    workspace: &Path,
+    target_dir: &Path,
+    env: &[(&str, String)],
+    spec: AttemptSpec<'_>,
+) -> CoverageAttempt {
+    let replace_clang_locator = cfg!(windows);
+    let remove_envs = bindgen_conflicting_env_keys(replace_clang_locator);
+    let mut retry_env = env
+        .iter()
+        .filter(|(key, _)| !bindgen_conflicting_env_key(key, replace_clang_locator))
+        .cloned()
+        .collect::<Vec<_>>();
+    if let Some(path) = super::tooling::ensure_host_libclang_dir(workspace) {
+        retry_env.push(("LIBCLANG_PATH", path));
+    }
+    let remove_envs = remove_envs.iter().map(String::as_str).collect::<Vec<_>>();
+    run_attempt_with_env_removals(workspace, target_dir, &retry_env, &remove_envs, spec)
+}
+
+fn bindgen_conflicting_env_keys(replace_clang_locator: bool) -> Vec<String> {
+    bindgen_conflicting_env_keys_from(
+        env::vars_os().filter_map(|(key, _)| key.into_string().ok()),
+        replace_clang_locator,
+    )
+}
+
+fn bindgen_conflicting_env_keys_from(
+    keys: impl IntoIterator<Item = String>,
+    replace_clang_locator: bool,
+) -> Vec<String> {
+    let mut remove = keys
+        .into_iter()
+        .filter(|key| bindgen_conflicting_env_key(key, replace_clang_locator))
+        .collect::<Vec<_>>();
+    let required = if replace_clang_locator {
+        &[
+            "LIBCLANG_PATH",
+            "CLANG_PATH",
+            "LLVM_CONFIG_PATH",
+            "BINDGEN_EXTRA_CLANG_ARGS",
+        ][..]
+    } else {
+        &["BINDGEN_EXTRA_CLANG_ARGS"][..]
+    };
+    for key in required {
+        if !remove.iter().any(|candidate| candidate.eq_ignore_ascii_case(key)) {
+            remove.push((*key).into());
+        }
+    }
+    remove.sort_by_key(|key| key.to_ascii_uppercase());
+    remove.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    remove
+}
+
+fn bindgen_conflicting_env_key(key: &str, replace_clang_locator: bool) -> bool {
+    let key = key.to_ascii_uppercase();
+    (replace_clang_locator
+        && matches!(key.as_str(), "LIBCLANG_PATH" | "CLANG_PATH" | "LLVM_CONFIG_PATH"))
+        || key == "BINDGEN_EXTRA_CLANG_ARGS"
+        || key.starts_with("BINDGEN_EXTRA_CLANG_ARGS_")
+}
+
 pub(super) fn run_attempt_with_env_removals(
     workspace: &Path,
     target_dir: &Path,
@@ -281,6 +344,8 @@ pub(super) fn classify_failure(diagnostic: &str) -> String {
         "unsupported-target".into()
     } else if profile_merge_failure(&text) {
         "profile-merge".into()
+    } else if bindgen_clang_environment_failure(&text) {
+        "environment-bindgen-clang".into()
     } else if native_build_failure(&text) {
         "environment-native-build".into()
     } else if test_failure(&text) {

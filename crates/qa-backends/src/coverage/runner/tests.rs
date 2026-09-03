@@ -237,7 +237,7 @@ fn direct_workspace_json_is_the_primary_path_for_normal_host_coverage() {
 }
 
 #[test]
-fn successful_direct_primary_trusts_cargo_llvm_cov_even_when_a_package_has_no_report_file() {
+fn successful_direct_primary_does_not_invent_coverage_for_missing_package_files() {
     let root = temp_dir("direct-partial");
     let packages = vec![
         super::super::model::CoveragePackage {
@@ -265,53 +265,160 @@ fn successful_direct_primary_trusts_cargo_llvm_cov_even_when_a_package_has_no_re
             ..CoverageEvidence::default()
         },
         package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec![],
         profile_count: 2,
         degraded: false,
     };
     let evidence = finalize::finalize_direct(&root, 2, vec![], &packages, recovered, vec![]);
-    assert_eq!(evidence.status, EvidenceStatus::Available);
+    assert_eq!(evidence.status, EvidenceStatus::Partial);
     assert_eq!(evidence.percent, Some(50.0));
     assert_eq!(evidence.eligible_packages, 2);
-    assert_eq!(evidence.covered_packages, 2);
-    assert_eq!(evidence.failed_packages, 0);
+    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.failed_packages, 1);
     assert_eq!(evidence.eligible_source_loc, 30);
-    assert_eq!(evidence.covered_source_loc, 30);
+    assert_eq!(evidence.covered_source_loc, 10);
     assert!(evidence.failure_manifest.is_some());
     fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn successful_direct_primary_does_not_downgrade_unknown_package_path_attribution() {
-    let root = temp_dir("direct-unattributed");
+fn direct_completion_only_supersedes_recoverable_environment_failures() {
     let packages = vec![super::super::model::CoveragePackage {
-        name: "kaspa-consensus".into(),
-        root: "C:/work/rusty-kaspa/consensus".into(),
+        name: "consensus".into(),
+        root: "/workspace/consensus".into(),
         source_loc: 10,
+        default_member: true,
+    }];
+    let recovered = || recovery::DirectRecovery {
+        evidence: CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(100.0),
+            files: std::collections::BTreeMap::from([(
+                "/workspace/consensus/src/lib.rs".into(),
+                std::collections::BTreeMap::from([(1, 1)]),
+            )]),
+            ..CoverageEvidence::default()
+        },
+        package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec![],
+        profile_count: 1,
+        degraded: true,
+    };
+
+    let bindgen_root = temp_dir("direct-recovered-bindgen");
+    let bindgen = finalize::finalize_direct(
+        &bindgen_root,
+        1,
+        vec![],
+        &packages,
+        recovered(),
+        vec![attempt(
+            None,
+            "direct-workspace-primary",
+            "failed",
+            Some("environment-bindgen-clang"),
+            0,
+            0,
+        )],
+    );
+    assert_eq!(bindgen.status, EvidenceStatus::Available);
+    fs::remove_dir_all(bindgen_root).unwrap();
+
+    let test_root = temp_dir("direct-test-failure");
+    let failed_test = finalize::finalize_direct(
+        &test_root,
+        1,
+        vec![],
+        &packages,
+        recovered(),
+        vec![attempt(
+            None,
+            "direct-workspace-primary",
+            "failed",
+            Some("test-failure"),
+            0,
+            1,
+        )],
+    );
+    assert_eq!(failed_test.status, EvidenceStatus::Partial);
+    fs::remove_dir_all(test_root).unwrap();
+}
+
+#[test]
+fn successful_package_with_no_executable_coverage_regions_is_not_applicable() {
+    let root = temp_dir("direct-not-applicable");
+    let packages = vec![
+        super::super::model::CoveragePackage {
+            name: "consensus".into(),
+            root: "/workspace/consensus".into(),
+            source_loc: 10,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "error-types".into(),
+            root: "/workspace/error-types".into(),
+            source_loc: 20,
+            default_member: true,
+        },
+    ];
+    let recovered = recovery::DirectRecovery {
+        evidence: CoverageEvidence {
+            status: EvidenceStatus::Available,
+            percent: Some(50.0),
+            source: Some(root.join("llvm-cov.json").display().to_string()),
+            files: std::collections::BTreeMap::from([(
+                "/workspace/consensus/src/lib.rs".into(),
+                std::collections::BTreeMap::from([(1, 1), (2, 0)]),
+            )]),
+            ..CoverageEvidence::default()
+        },
+        package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec!["error-types".into()],
+        profile_count: 2,
+        degraded: true,
+    };
+
+    let evidence = finalize::finalize_direct(&root, 2, vec![], &packages, recovered, vec![]);
+    assert_eq!(evidence.status, EvidenceStatus::Available);
+    assert_eq!(evidence.percent, Some(50.0));
+    assert_eq!(evidence.eligible_packages, 1);
+    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.failed_packages, 0);
+    assert_eq!(evidence.not_applicable_packages, 1);
+    assert_eq!(evidence.scope_percent, Some(100.0));
+    assert_eq!(evidence.eligible_source_loc, 10);
+    assert_eq!(evidence.covered_source_loc, 10);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn all_successful_packages_without_executable_regions_are_not_applicable() {
+    let root = temp_dir("direct-all-not-applicable");
+    let packages = vec![super::super::model::CoveragePackage {
+        name: "error-types".into(),
+        root: "/workspace/error-types".into(),
+        source_loc: 20,
         default_member: true,
     }];
     let recovered = recovery::DirectRecovery {
         evidence: CoverageEvidence {
             status: EvidenceStatus::Available,
-            percent: Some(73.5),
+            percent: Some(0.0),
             source: Some(root.join("llvm-cov.json").display().to_string()),
-            files: std::collections::BTreeMap::from([(
-                "unexpected/path/src/lib.rs".into(),
-                std::collections::BTreeMap::from([(1, 1), (2, 0)]),
-            )]),
             ..CoverageEvidence::default()
         },
         package_names: vec![],
-        profile_count: 0,
+        not_applicable_package_names: vec!["error-types".into()],
+        profile_count: 1,
         degraded: false,
     };
 
     let evidence = finalize::finalize_direct(&root, 1, vec![], &packages, recovered, vec![]);
-    assert_eq!(evidence.status, EvidenceStatus::Available);
-    assert_eq!(evidence.percent, Some(73.5));
-    assert!(evidence.files.contains_key("unexpected/path/src/lib.rs"));
-    assert_eq!(evidence.eligible_packages, 1);
-    assert_eq!(evidence.covered_packages, 1);
+    assert_eq!(evidence.status, EvidenceStatus::NotApplicable);
+    assert_eq!(evidence.eligible_packages, 0);
+    assert_eq!(evidence.covered_packages, 0);
     assert_eq!(evidence.failed_packages, 0);
+    assert_eq!(evidence.not_applicable_packages, 1);
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -417,8 +524,8 @@ fn cargo_workspace_resolution_refuses_ambiguous_projects() {
 }
 
 #[test]
-fn successful_direct_primary_never_scope_filters_valid_llvm_json() {
-    let root = temp_dir("direct-scope-empty");
+fn complete_direct_finalization_preserves_authoritative_llvm_totals() {
+    let root = temp_dir("direct-scope");
     let packages = vec![super::super::model::CoveragePackage {
         name: "kaspa-consensus".into(),
         root: "C:/work/rusty-kaspa/consensus".into(),
@@ -431,7 +538,10 @@ fn successful_direct_primary_never_scope_filters_valid_llvm_json() {
             percent: Some(61.25),
             source: Some(root.join("llvm-cov.json").display().to_string()),
             files: std::collections::BTreeMap::from([
-                ("C:/work/rusty-kaspa/consensus/src/lib.rs".into(), Default::default()),
+                (
+                    "C:/work/rusty-kaspa/consensus/src/lib.rs".into(),
+                    std::collections::BTreeMap::from([(1, 1), (2, 0)]),
+                ),
                 (
                     "unattributed/generated/source.rs".into(),
                     std::collections::BTreeMap::from([(1, 1), (2, 0)]),
@@ -440,6 +550,7 @@ fn successful_direct_primary_never_scope_filters_valid_llvm_json() {
             ..CoverageEvidence::default()
         },
         package_names: vec!["kaspa-consensus".into()],
+        not_applicable_package_names: vec![],
         profile_count: 0,
         degraded: false,
     };
@@ -478,6 +589,7 @@ fn degraded_direct_primary_schedules_recovery_only_for_unmeasured_members() {
     let recovered = recovery::DirectRecovery {
         evidence: CoverageEvidence::default(),
         package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec![],
         profile_count: 80,
         degraded: true,
     };
@@ -490,7 +602,7 @@ fn degraded_direct_primary_schedules_recovery_only_for_unmeasured_members() {
 }
 
 #[test]
-fn successful_or_fully_attributed_direct_primary_does_not_schedule_duplicate_recovery() {
+fn successful_direct_primary_schedules_recovery_for_unattributed_members() {
     let packages = vec![
         super::super::model::CoveragePackage {
             name: "consensus".into(),
@@ -508,16 +620,22 @@ fn successful_or_fully_attributed_direct_primary_does_not_schedule_duplicate_rec
     let successful = recovery::DirectRecovery {
         evidence: CoverageEvidence::default(),
         package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec![],
         profile_count: 2,
         degraded: false,
     };
-    assert!(direct_recovery_candidates(&packages, &successful).is_empty());
+    let missing = direct_recovery_candidates(&packages, &successful);
+    assert_eq!(
+        missing.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(),
+        ["wallet"]
+    );
 
-    let degraded_but_complete = recovery::DirectRecovery {
+    let complete = recovery::DirectRecovery {
         evidence: CoverageEvidence::default(),
-        package_names: vec!["consensus".into(), "wallet".into()],
+        package_names: vec!["consensus".into()],
+        not_applicable_package_names: vec!["wallet".into()],
         profile_count: 4,
         degraded: true,
     };
-    assert!(direct_recovery_candidates(&packages, &degraded_but_complete).is_empty());
+    assert!(direct_recovery_candidates(&packages, &complete).is_empty());
 }

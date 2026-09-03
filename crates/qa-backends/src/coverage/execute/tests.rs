@@ -81,7 +81,7 @@ fn failure_stages_separate_test_execution_from_instrumentation_and_reporting() {
 fn diagnostics_distinguish_native_bindgen_target_test_and_build_failures() {
     assert_eq!(
         classify_failure("librocksdb-sys bindgen could not find libclang"),
-        "environment-native-build"
+        "environment-bindgen-clang"
     );
     assert_eq!(
         classify_failure(
@@ -192,7 +192,7 @@ fn direct_report_recovery_is_package_scoped_and_generates_json() {
 }
 
 #[test]
-fn bindgen_host_pointer_mismatch_is_recognized_for_clean_clang_retry() {
+fn bindgen_host_pointer_mismatch_is_recognized_for_host_bindgen_retry() {
     let diagnostic = r#"error: failed to run custom build command for `librocksdb-sys`
 thread 'main' panicked at bindgen-0.72.1\lib.rs:917:13:
 assertion `left == right` failed: "x86_64-pc-windows-msvc"
@@ -264,4 +264,45 @@ fn primary_output_setup_does_not_touch_existing_evidence_or_fallback_targets() {
     assert!(root.join("llvm-cov-target/stale.profraw").is_file());
     assert!(root.join("llvm-cov-rescue/stale.profraw").is_file());
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn bindgen_retry_removes_ambient_clang_state_before_injecting_a_known_host_libclang() {
+    let keys = bindgen_conflicting_env_keys_from(
+        [
+            "LIBCLANG_PATH".to_string(),
+            "CLANG_PATH".to_string(),
+            "BINDGEN_EXTRA_CLANG_ARGS".to_string(),
+            "BINDGEN_EXTRA_CLANG_ARGS_x86_64-pc-windows-msvc".to_string(),
+            "BINDGEN_EXTRA_CLANG_ARGS_x86_64_pc_windows_msvc".to_string(),
+            "LLVM_CONFIG_PATH".to_string(),
+            "UNRELATED".to_string(),
+        ],
+        true,
+    );
+    for expected in [
+        "LIBCLANG_PATH",
+        "CLANG_PATH",
+        "LLVM_CONFIG_PATH",
+        "BINDGEN_EXTRA_CLANG_ARGS",
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64-pc-windows-msvc",
+        "BINDGEN_EXTRA_CLANG_ARGS_x86_64_pc_windows_msvc",
+    ] {
+        assert!(keys.iter().any(|key| key == expected), "missing {expected}");
+    }
+    assert!(!keys.iter().any(|key| key == "UNRELATED"));
+}
+
+#[test]
+fn non_windows_bindgen_retry_preserves_existing_clang_locators() {
+    let keys = bindgen_conflicting_env_keys_from(
+        [
+            "LIBCLANG_PATH".to_string(),
+            "CLANG_PATH".to_string(),
+            "LLVM_CONFIG_PATH".to_string(),
+            "BINDGEN_EXTRA_CLANG_ARGS".to_string(),
+        ],
+        false,
+    );
+    assert_eq!(keys, vec!["BINDGEN_EXTRA_CLANG_ARGS"]);
 }

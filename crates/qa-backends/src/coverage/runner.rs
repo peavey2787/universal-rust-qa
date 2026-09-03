@@ -85,6 +85,12 @@ pub(super) fn collect_progressive(
                                     recovered.package_names.push(name);
                                 }
                             }
+                            for name in extra.not_applicable_package_names {
+                                if !recovered.not_applicable_package_names.contains(&name) {
+                                    recovered.not_applicable_package_names.push(name);
+                                }
+                            }
+                            recovered.degraded |= extra.degraded;
                             recovered.profile_count += extra.profile_count;
                             recovery::persist_merged_evidence(output, &mut recovered.evidence);
                         }
@@ -233,12 +239,12 @@ fn direct_recovery_candidates(
     packages: &[super::model::CoveragePackage],
     recovered: &recovery::DirectRecovery,
 ) -> Vec<super::model::CoveragePackage> {
-    if !recovered.degraded {
-        return Vec::new();
-    }
     packages
         .iter()
-        .filter(|package| !recovered.package_names.contains(&package.name))
+        .filter(|package| {
+            !recovered.package_names.contains(&package.name)
+                && !recovered.not_applicable_package_names.contains(&package.name)
+        })
         .cloned()
         .collect()
 }

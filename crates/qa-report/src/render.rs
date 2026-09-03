@@ -87,11 +87,12 @@ fn coverage_text(coverage: &qa_model::CoverageSummary) -> String {
             )
         }
         EvidenceStatus::Available if coverage.eligible_packages > 0 => format!(
-            "{percent} COMPLETE | packages {}/{} | source LOC {}/{} | profiles {}",
+            "{percent} COMPLETE | packages {}/{} | source LOC {}/{} | N/A {} | profiles {}",
             coverage.covered_packages,
             coverage.eligible_packages,
             coverage.covered_source_loc,
             coverage.eligible_source_loc,
+            coverage.not_applicable_packages,
             coverage.profile_count
         ),
         EvidenceStatus::Failed if coverage.profile_count > 0 => {

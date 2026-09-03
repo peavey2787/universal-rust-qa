@@ -318,6 +318,12 @@ fn coverage_label(summary: &SummaryMetrics) -> String {
             ),
             None => format!("{percent} PARTIAL (scope unknown)"),
         },
+        qa_model::EvidenceStatus::Available if summary.coverage.eligible_packages > 0 => format!(
+            "{percent} COMPLETE (scope 100.0%, {}/{}, N/A {})",
+            summary.coverage.covered_packages,
+            summary.coverage.eligible_packages,
+            summary.coverage.not_applicable_packages
+        ),
         qa_model::EvidenceStatus::Failed if summary.coverage.profile_count > 0 => {
             format!("N/A FAILED ({} raw profiles retained)", summary.coverage.profile_count)
         }
