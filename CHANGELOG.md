@@ -1,3 +1,9 @@
+## 2026-09-03 - r75 finalize first usable coverage report immediately
+
+- Fixed the r74 control-flow regression demonstrated by the attached Rusty Kaspa `qa-out`: a native-build failure could still yield a valid salvaged `llvm-cov.json`, but the normal direct path treated degraded evidence as a reason to start a second package-by-package coverage campaign before publishing the report. QA now treats the first usable direct/salvaged JSON report as terminal for the normal coverage pass, immediately finalizes numeric coverage/CRAP evidence, and marks incomplete scope Partial instead of continuing to rebuild the workspace.
+- This preserves the actual salvaged LLVM evidence from the reported run (25.1641% line coverage over 457 executable lines in the uploaded report) rather than leaving the dashboard on stale `coverage N/A` while recovery continues. Package-level recovery remains available only when the workspace direct path produces no usable JSON at all.
+- Advanced the visible development revision to r75. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r74 apply r73 rustfmt output
 
 - Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r73 native-build coverage recovery changes.
