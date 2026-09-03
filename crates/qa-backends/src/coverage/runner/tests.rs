@@ -452,3 +452,72 @@ fn successful_direct_primary_never_scope_filters_valid_llvm_json() {
     assert_eq!(evidence.failed_packages, 0);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn degraded_direct_primary_schedules_recovery_only_for_unmeasured_members() {
+    let packages = vec![
+        super::super::model::CoveragePackage {
+            name: "consensus".into(),
+            root: "/workspace/consensus".into(),
+            source_loc: 10,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "wallet".into(),
+            root: "/workspace/wallet".into(),
+            source_loc: 20,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "rocksdb".into(),
+            root: "/workspace/rocksdb".into(),
+            source_loc: 30,
+            default_member: true,
+        },
+    ];
+    let recovered = recovery::DirectRecovery {
+        evidence: CoverageEvidence::default(),
+        package_names: vec!["consensus".into()],
+        profile_count: 80,
+        degraded: true,
+    };
+
+    let missing = direct_recovery_candidates(&packages, &recovered);
+    assert_eq!(
+        missing.iter().map(|package| package.name.as_str()).collect::<Vec<_>>(),
+        ["wallet", "rocksdb"]
+    );
+}
+
+#[test]
+fn successful_or_fully_attributed_direct_primary_does_not_schedule_duplicate_recovery() {
+    let packages = vec![
+        super::super::model::CoveragePackage {
+            name: "consensus".into(),
+            root: "/workspace/consensus".into(),
+            source_loc: 10,
+            default_member: true,
+        },
+        super::super::model::CoveragePackage {
+            name: "wallet".into(),
+            root: "/workspace/wallet".into(),
+            source_loc: 20,
+            default_member: true,
+        },
+    ];
+    let successful = recovery::DirectRecovery {
+        evidence: CoverageEvidence::default(),
+        package_names: vec!["consensus".into()],
+        profile_count: 2,
+        degraded: false,
+    };
+    assert!(direct_recovery_candidates(&packages, &successful).is_empty());
+
+    let degraded_but_complete = recovery::DirectRecovery {
+        evidence: CoverageEvidence::default(),
+        package_names: vec!["consensus".into(), "wallet".into()],
+        profile_count: 4,
+        degraded: true,
+    };
+    assert!(direct_recovery_candidates(&packages, &degraded_but_complete).is_empty());
+}

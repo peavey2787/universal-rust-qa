@@ -69,6 +69,26 @@ pub(super) fn collect_progressive(
                 Ok((workspace_count, packages, static_not_applicable)) => {
                     recovered.package_names =
                         recovery::measured_package_names(&packages, &recovered.evidence);
+                    let missing = direct_recovery_candidates(&packages, &recovered);
+                    if !missing.is_empty() {
+                        let scope = fallback_scope(&packages);
+                        if let Some(extra) = recovery::recover_direct_reports(
+                            workspace,
+                            output,
+                            &scope,
+                            &missing,
+                            &mut attempts,
+                        ) {
+                            super::parse::merge_evidence(&mut recovered.evidence, extra.evidence);
+                            for name in extra.package_names {
+                                if !recovered.package_names.contains(&name) {
+                                    recovered.package_names.push(name);
+                                }
+                            }
+                            recovered.profile_count += extra.profile_count;
+                            recovery::persist_merged_evidence(output, &mut recovered.evidence);
+                        }
+                    }
                     return finalize::finalize_direct(
                         output,
                         workspace_count,
@@ -207,6 +227,20 @@ pub(super) fn collect_progressive(
         attempts,
         degraded,
     )
+}
+
+fn direct_recovery_candidates(
+    packages: &[super::model::CoveragePackage],
+    recovered: &recovery::DirectRecovery,
+) -> Vec<super::model::CoveragePackage> {
+    if !recovered.degraded {
+        return Vec::new();
+    }
+    packages
+        .iter()
+        .filter(|package| !recovered.package_names.contains(&package.name))
+        .cloned()
+        .collect()
 }
 
 fn resolve_cargo_workspace(root: &Path) -> Option<PathBuf> {

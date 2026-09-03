@@ -1,3 +1,9 @@
+## 2026-09-03 - r76 recover missing members after partial direct coverage
+
+- Fixed the r75 overcorrection exposed by the Rusty Kaspa workspace: a nonzero workspace `cargo llvm-cov` run could emit valid JSON for one early package, and r75 immediately finalized that report as `1/69` while labeling the other 68 eligible members failed even though they had never received targeted coverage attempts. A usable-but-degraded direct report is now provisional when package attribution shows missing members.
+- QA retains the first real LLVM report, skips every package already represented in it, and runs package-level tail recovery only for the unmeasured members. Recovered line evidence is merged back into the canonical `llvm-cov.json`; members are counted as failed only when targeted recovery still cannot produce usable line evidence. Successful direct workspace runs and degraded runs that already cover all attributed members still finalize immediately, so the r75 no-duplicate-work behavior is preserved.
+- Added regression coverage for the direct-tail candidate selection and updated the README coverage contract. Advanced the visible development revision to r76; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r75 finalize first usable coverage report immediately
 
 - Fixed the r74 control-flow regression demonstrated by the attached Rusty Kaspa `qa-out`: a native-build failure could still yield a valid salvaged `llvm-cov.json`, but the normal direct path treated degraded evidence as a reason to start a second package-by-package coverage campaign before publishing the report. QA now treats the first usable direct/salvaged JSON report as terminal for the normal coverage pass, immediately finalizes numeric coverage/CRAP evidence, and marks incomplete scope Partial instead of continuing to rebuild the workspace.
