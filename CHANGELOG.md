@@ -1,3 +1,8 @@
+## 2026-09-03 - r79 satisfy strict clippy argument limit
+
+- Fixed the strict `cargo clippy -- -D warnings` failure in `coverage::runner::recovery`: `run_package_direct_recovery` had eight parameters and tripped `clippy::too_many_arguments` (8/7). The per-attempt target/report/clang settings are now grouped in a small `PackageRecoveryConfig`, reducing the helper to six parameters without changing recovery behavior.
+- Advanced the visible development revision to r79; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r78 apply r77 rustfmt output
 
 - Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r77 coverage-recovery changes.

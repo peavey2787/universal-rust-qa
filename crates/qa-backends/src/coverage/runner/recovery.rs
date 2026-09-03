@@ -190,14 +190,17 @@ pub(super) fn recover_direct_reports(
             continue;
         }
         let target_triple = recovery_target(attempts, &package.name);
+        let config = PackageRecoveryConfig {
+            target_triple: target_triple.as_deref(),
+            path: &path,
+            clean_clang_first,
+        };
         let mut run = run_package_direct_recovery(
             workspace,
             &rescue_target,
             &rescue_env,
             package,
-            target_triple.as_deref(),
-            &path,
-            clean_clang_first,
+            config,
             attempts,
         );
         degraded |= run.degraded;
@@ -217,9 +220,7 @@ pub(super) fn recover_direct_reports(
                 &rescue_target,
                 &rescue_env,
                 package,
-                target_triple.as_deref(),
-                &path,
-                clean_clang_first,
+                config,
                 attempts,
             );
             degraded |= run.degraded;
@@ -263,6 +264,13 @@ pub(super) fn recover_direct_reports(
 }
 
 #[derive(Debug, Clone, Copy)]
+struct PackageRecoveryConfig<'a> {
+    target_triple: Option<&'a str>,
+    path: &'a Path,
+    clean_clang_first: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct PackageRecoveryRun {
     degraded: bool,
     storage_exhausted: bool,
@@ -273,11 +281,10 @@ fn run_package_direct_recovery(
     rescue_target: &Path,
     rescue_env: &[(&str, String)],
     package: &CoveragePackage,
-    target_triple: Option<&str>,
-    path: &Path,
-    clean_clang_first: bool,
+    config: PackageRecoveryConfig<'_>,
     attempts: &mut Vec<CoverageAttempt>,
 ) -> PackageRecoveryRun {
+    let PackageRecoveryConfig { target_triple, path, clean_clang_first } = config;
     let spec = AttemptSpec {
         package: Some(&package.name),
         target: target_triple,
