@@ -110,13 +110,8 @@ pub(super) fn finalize_progressive(
     mut attempts: Vec<CoverageAttempt>,
     mut degraded: bool,
 ) -> CoverageEvidence {
-    let ProgressiveFinalizeInput {
-        workspace_count,
-        static_not_applicable,
-        scope,
-        target,
-        env,
-    } = input;
+    let ProgressiveFinalizeInput { workspace_count, static_not_applicable, scope, target, env } =
+        input;
     let report_path = output.join("llvm-cov.json");
     let mut profile_count = count_profiles(&target);
     let mut report_ok = false;

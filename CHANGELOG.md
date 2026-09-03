@@ -1,3 +1,8 @@
+## 2026-09-03 - r72 apply r71 rustfmt output
+
+- Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r71 strict-gate repair.
+- No coverage behavior changed; the r70 self/external coverage architecture and r71 Clippy/test repairs are unchanged. Package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-02 - r71 repair r70 strict gates
 
 - Refactored progressive coverage finalization inputs into a dedicated value object so the coverage backend passes strict Clippy `-D warnings` without suppressing `clippy::too_many_arguments`. Coverage behavior is unchanged.
