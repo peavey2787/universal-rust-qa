@@ -9,6 +9,8 @@ use std::{
 
 mod cargo;
 mod watch;
+#[cfg(windows)]
+mod windows;
 
 thread_local! {
     static CARGO_TARGET_DIR_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
@@ -417,7 +419,7 @@ fn suspend_process_tree(pid: u32) -> io::Result<()> {
     }
     #[cfg(windows)]
     {
-        run_windows_process_control(pid, "suspend")
+        windows::suspend_process_tree(pid)
     }
 }
 
@@ -428,7 +430,7 @@ fn resume_process_tree(pid: u32) -> io::Result<()> {
     }
     #[cfg(windows)]
     {
-        run_windows_process_control(pid, "resume")
+        windows::resume_process_tree(pid)
     }
 }
 
@@ -439,7 +441,7 @@ fn terminate_process_tree(pid: u32) -> io::Result<()> {
     }
     #[cfg(windows)]
     {
-        terminate_windows_process_tree(pid)
+        windows::terminate_process_tree(pid)
     }
 }
 
@@ -450,7 +452,7 @@ fn terminate_descendants(pid: u32) -> io::Result<()> {
     }
     #[cfg(windows)]
     {
-        run_windows_process_control(pid, "terminate-descendants")
+        windows::terminate_descendants(pid)
     }
 }
 
@@ -458,37 +460,6 @@ fn terminate_descendants(pid: u32) -> io::Result<()> {
 fn signal_group(pid: u32, signal: &str) -> io::Result<()> {
     let status = Command::new("kill").arg(signal).arg(format!("-{pid}")).status()?;
     if status.success() { Ok(()) } else { Err(io::Error::other(format!("kill {signal} failed"))) }
-}
-
-#[cfg(windows)]
-fn terminate_windows_process_tree(pid: u32) -> io::Result<()> {
-    let pid_text = pid.to_string();
-    let status = Command::new("taskkill")
-        .args(["/PID", pid_text.as_str(), "/T", "/F"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
-    if status.success() {
-        return Ok(());
-    }
-    run_windows_process_control(pid, "terminate")
-}
-
-#[cfg(windows)]
-fn run_windows_process_control(pid: u32, mode: &str) -> io::Result<()> {
-    const SCRIPT: &str = include_str!("windows_process_control.ps1");
-    let status = Command::new("powershell.exe")
-        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", SCRIPT])
-        .env("QA_PROCESS_CONTROL_PID", pid.to_string())
-        .env("QA_PROCESS_CONTROL_MODE", mode)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(io::Error::other(format!("unable to {mode} active process tree")))
-    }
 }
 
 pub fn command_available(workspace: &Path, program: &str) -> bool {

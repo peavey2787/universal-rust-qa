@@ -366,8 +366,9 @@ fn process_tree_controls_fail_closed_for_a_missing_process() {
     assert!(signal_group(missing, "-STOP").is_err());
     #[cfg(windows)]
     {
-        assert!(run_windows_process_control(missing, "suspend").is_err());
-        assert!(terminate_windows_process_tree(missing).is_err());
+        assert!(windows::suspend_process_tree(missing).is_err());
+        assert!(windows::terminate_process_tree(missing).is_err());
+        assert!(windows::terminate_descendants(missing).is_ok());
     }
 }
 

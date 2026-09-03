@@ -1,3 +1,9 @@
+## 2026-09-03 - r82 make Windows process control native and bounded
+
+- Fixed the Windows self-test failures in controlled pause/resume/skip and completion-watch cleanup. The old control path launched a fresh PowerShell process, compiled an `Add-Type` helper, and enumerated `Win32_Process` through CIM for every suspend, resume, or descendant-cleanup operation. On a cold Windows host that helper can take seconds, blocking the 80 ms monitor loop long enough for short-lived child commands to finish naturally before a queued skip or forced cleanup is observed.
+- Replaced the PowerShell/CIM helper with in-process Windows APIs. QA now snapshots the process tree with Tool Help, opens only the affected processes, uses `NtSuspendProcess`/`NtResumeProcess` for pause/resume, and uses `TerminateProcess` for fail-closed skip/watchdog cleanup. Descendants are resumed or terminated deepest-first while suspension starts at the root, and a vanished descendant is treated as already cleaned rather than turning an otherwise successful tree operation into a failure.
+- Removed the obsolete `windows_process_control.ps1` subprocess helper and added a Windows-only `windows-sys` dependency for the raw Win32 process APIs. Existing live-dashboard semantics and fail-closed skip behavior are unchanged; the monitor loop no longer waits on PowerShell startup, dynamic C# compilation, or CIM enumeration for these controls. Advanced the visible development revision to r82; package semantic versions remain pinned at 0.1.0.
+
 ## 2026-09-03 - r81 apply r80 rustfmt output
 
 - Applied the exact stable rustfmt output reported by the Windows `cargo fmt --check` run for the r80 complete-coverage recovery changes.
